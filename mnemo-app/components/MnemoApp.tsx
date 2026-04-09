@@ -1225,57 +1225,62 @@ function MnemoAppInner() {
       ? 'DOCUMENT CONTEXT (global themes and key terms — use this to understand what matters across the whole text):\n"""' + docContext + '"""\n\n'
       : '';
 
-    const maxPct = Math.round(wc * 0.06); // 6% hard cap — research optimal for salient emphasis
+    const maxPct = Math.round(wc * 0.06); // 6% budget across the whole chunk
     const prompt =
-      'Return ONLY valid JSON. You are an EXTREMELY SELECTIVE semantic highlighter for a speed-reading app.\n\n' +
+      'Return ONLY valid JSON. You are a senior editor annotating a text for a speed-reading app.\n\n' +
       docNote +
-      'FULL PASSAGE CONTEXT:\n"""' + contextText.slice(0, 3000) + '"""\n\n' +
-      '═══ CORE LAW: SPARSITY ═══\n' +
-      'Cognitive load research (Sweller 1988; Dunlosky et al. 2013; Mayer signaling studies) shows:\n' +
-      '— Highlighting above 10% is WORSE than no highlighting at all. The contrast collapses.\n' +
-      '— Optimal retention highlighting: 5–6% of words. That is your ceiling.\n' +
-      'HARD CAP: at most ' + maxPct + ' highlighted words in this ' + wc + '-word block.\n' +
-      'When in doubt, null. Unhighlighted words are the correct default.\n\n' +
-      '═══ THE ONE TEST THAT MATTERS ═══\n' +
-      'For each word: "Could a reader reconstruct or infer this from the surrounding words?"\n' +
-      '• If YES → null, always.\n' +
-      '• If NO → candidate for highlight.\n' +
-      'Numbers and specific figures almost always pass. Verbs and adjectives almost never pass.\n\n' +
-      '═══ WHAT TO HIGHLIGHT (strict priority — stop when cap reached) ═══\n\n' +
-      '"orange" — IRREPLACEABLE FACTS:\n' +
-      '  1. Every specific number, statistic, percentage, age, ratio, or measurement.\n' +
-      '     → "45.0", "2.7", "million", "0.1%", "1.8", "13", "250", "80%"\n' +
-      '     → If a reader forgets "45.0" they lose the fact entirely. Always orange.\n' +
-      '  2. The text\'s coined or domain-specific technical term, on first use only.\n' +
-      '     Highlight ALL words in the unit: "visual" AND "anchor" both orange.\n\n' +
-      '"green" — THE SINGLE KEY FINDING PER SENTENCE:\n' +
-      '  Ask: "What is the one word a student would write in their notes from this sentence?"\n' +
-      '  That word — and only that word — gets green. Not the verb that introduces it.\n' +
-      '  → In "the authors conclude entrepreneurs are middle-aged, not young":\n' +
-      '     "middle-aged" → green. "conclude", "authors", "explicitly" → all null.\n' +
-      '  → In "success skews older, not younger": "older" → green. "skews", "success" → null.\n' +
-      '  → ONE green word per sentence maximum. Often zero.\n\n' +
-      '═══ ABSOLUTE NEVER-HIGHLIGHT LIST ═══\n' +
-      '• Verbs of attribution/citation: conclude, find, show, suggest, argue, report, indicate,\n' +
-      '  demonstrate, note, state, claim, prove, reveal, confirm, establish — ALWAYS null\n' +
-      '• Adverbs of manner: explicitly, clearly, strongly, simply, directly, importantly — ALWAYS null\n' +
-      '• Process words: evidence, research, study, data, analysis, results, findings — null unless\n' +
-      '  this text is specifically defining what "evidence" or "research" means as a concept\n' +
-      '• All function words: the, a, an, of, in, that, which, and, or, but, with, by, to, for, from\n' +
-      '• Generic academic words: broad, large-scale, major, significant, important, key, strong, weak\n' +
-      '• Second/third mentions of any concept already highlighted\n' +
-      '• Any word that is merely a synonym or restatement of an already-highlighted word\n\n' +
-      '═══ ANTI-CLUSTER RULE ═══\n' +
-      'If 2 or more consecutive words would be highlighted, keep only the most essential ONE.\n' +
-      'A cluster of green destroys the signal. Space highlights across the passage.\n\n' +
+      'FULL PASSAGE:\n"""' + contextText.slice(0, 3000) + '"""\n\n' +
+      '═══ STEP 1 — READ BEFORE YOU SCORE ═══\n' +
+      'Before assigning any color, read the entire passage above. Ask:\n' +
+      '  • What is the central argument or thesis of this text?\n' +
+      '  • Which 1–3 sentences are LOAD-BEARING — the ones the whole argument stands on?\n' +
+      '  • Which sentences are transitional, illustrative, or elaborating (supporting cast)?\n' +
+      'You will concentrate highlights on load-bearing sentences and leave supporting sentences sparse.\n\n' +
+      '═══ STEP 2 — BUDGET YOUR HIGHLIGHTS ═══\n' +
+      'Total highlight budget: ' + maxPct + ' words across this entire ' + wc + '-word block.\n' +
+      'Cognitive load research (Sweller 1988; Dunlosky et al. 2013) shows highlighting above ~6–8% of\n' +
+      'words destroys the contrast signal — everything looks important, so nothing is.\n' +
+      'Distribute your budget UNEVENLY:\n' +
+      '  • A pivotal sentence may use 4–6 highlights if the argument truly demands it.\n' +
+      '  • A transitional or elaborating sentence should use 0.\n' +
+      '  • The total across all sentences must stay ≤ ' + maxPct + '.\n\n' +
+      '═══ STEP 3 — SCORING RULES ═══\n\n' +
+      '"orange" — IRREPLACEABLE FACTS (always take priority in your budget):\n' +
+      '  • Every specific number, statistic, percentage, age, ratio, or measurement.\n' +
+      '    Numbers cannot be reconstructed from context. They are always orange.\n' +
+      '    → "45.0", "2.7 million", "0.1%", "1.8x", "13 milliseconds", "250 WPM", "80%"\n' +
+      '  • The text\'s own coined or specialist term, on its first use.\n' +
+      '    Highlight ALL words in the unit: "visual anchor" = both orange.\n\n' +
+      '"green" — THE ARGUMENT\'S KEY CLAIM WORDS:\n' +
+      '  • The word(s) that carry the actual CONTENT of the argument — the finding, the contrast,\n' +
+      '    the claim — not the words that describe how it was argued.\n' +
+      '  • In a PIVOTAL sentence: multiple greens are fine if they each carry distinct meaning.\n' +
+      '  • In a SUPPORTING sentence: zero or one green.\n' +
+      '  • Always ask: "Is this the claim itself, or just a description of the claim?"\n' +
+      '    → "middle-aged" = the claim → green\n' +
+      '    → "conclude", "explicitly", "authors", "show" = description of the claim → null\n\n' +
+      '═══ NEVER HIGHLIGHT — THESE ARE ALWAYS NULL ═══\n' +
+      '• Verbs of attribution: conclude, find, show, suggest, argue, report, indicate,\n' +
+      '  demonstrate, note, state, claim, prove, reveal, confirm, establish\n' +
+      '• Manner adverbs: explicitly, clearly, strongly, simply, directly, importantly, notably\n' +
+      '• Generic academic nouns used as filler: evidence, research, study, analysis, results\n' +
+      '  (Exception: highlight if the text is specifically defining what these terms mean)\n' +
+      '• All function words: the, a, an, of, in, that, which, and, or, but, with, by, to, for\n' +
+      '• Vague qualifiers: broad, large-scale, major, significant, important, key, various\n' +
+      '• Any word already highlighted earlier in the text (familiarity decay)\n\n' +
       '═══ FAMILIARITY DECAY ═══\n' +
       familiarNote + '\n\n' +
       '═══ CALIBRATION EXAMPLE ═══\n' +
-      'Text (25 words): "The mean founder age for the fastest-growing 0.1% of startups is 45.0, and the authors explicitly conclude that successful entrepreneurs are middle-aged, not young."\n' +
-      'CORRECT output (3 highlights = 12%... too high — but shows which words):\n' +
-      '  "0.1%" → orange (statistic), "45.0" → orange (statistic), "middle-aged" → green (key finding)\n' +
-      '  "fastest-growing" → null, "startups" → null, "authors" → null, "explicitly" → null,\n' +
-      '  "conclude" → null, "successful" → null, "entrepreneurs" → null\n\n' +
+      'Passage contains two sentences:\n' +
+      'S1 (PIVOTAL): "The mean founder age for the fastest-growing 0.1% of startups is 45.0 — and\n' +
+      '  successful entrepreneurs are middle-aged, not young."\n' +
+      'S2 (TRANSITIONAL): "This finding has been replicated across multiple datasets."\n' +
+      'CORRECT scoring:\n' +
+      '  S1: "0.1%" → orange, "45.0" → orange, "middle-aged" → green, "young" → green\n' +
+      '      (4 highlights on the pivotal sentence — it earns them)\n' +
+      '  S2: everything → null (transitional — adds no new claim)\n' +
+      '  NOT highlighted: "fastest-growing", "startups", "successful", "entrepreneurs",\n' +
+      '    "conclude", "explicitly", "finding", "replicated", "datasets"\n\n' +
       '{"wordColors":[EXACTLY ' + wc + ' values, one per word, total non-null ≤ ' + maxPct + ']}\n\n' +
       'Words to score (' + wc + '): ' + wl;
 

@@ -594,23 +594,23 @@ async function fetchWordColors(wordList, docContext){
   for (var i = 0; i < wordList.length; i += CHUNK){
     var chunk = wordList.slice(i, i+CHUNK), wc = chunk.length;
     var cap = Math.max(2, Math.round(wc * 0.06));
-    var prompt = 'Return ONLY valid JSON. You are an EXTREMELY SELECTIVE semantic highlighter.\n\n'+ctxNote+
-      'HARD CAP: at most '+cap+' highlighted words in these '+wc+' words. Default is null.\n\n'+
-      'WHAT TO HIGHLIGHT:\n'+
-      '"orange" — specific numbers, statistics, percentages, measurements (e.g. "45.0", "2.7 million", "0.1%", "80%").\n'+
-      '  These are irreplaceable — a reader cannot reconstruct them from context. ALWAYS orange.\n'+
-      '"green" — the single key FINDING per sentence. One word a student would write in their notes.\n'+
-      '  Ask: what is this sentence ultimately saying? That word gets green. Nothing else in the sentence does.\n\n'+
-      'NEVER HIGHLIGHT:\n'+
-      '• Verbs of attribution: conclude, find, show, suggest, argue, report, indicate, demonstrate, note, state\n'+
-      '• Adverbs: explicitly, clearly, strongly, simply, importantly\n'+
-      '• Process/evidence words: evidence, research, study, data, analysis, results, findings\n'+
-      '• Generic qualifiers: broad, large-scale, major, significant, important, strong, weak\n'+
-      '• Any word inferable from surrounding context\n'+
-      '• 2+ consecutive words highlighted — keep only the most essential ONE per cluster\n\n'+
-      'EXAMPLE: "the authors explicitly conclude that entrepreneurs are middle-aged, not young"\n'+
-      '→ "middle-aged"=green, everything else=null. NOT "explicitly", NOT "conclude", NOT "entrepreneurs"\n\n'+
-      '{"wordColors":[EXACTLY '+wc+' values, total non-null ≤ '+cap+']}\n\nWords: '+chunk.join(' ');
+    var prompt = 'Return ONLY valid JSON. You are a senior editor annotating text for a speed-reading app.\n\n'+ctxNote+
+      'PASSAGE TO SCORE:\n"""'+chunk.join(' ')+'"""\n\n'+
+      'STEP 1 — READ FIRST: Before scoring, identify the central argument of this passage.\n'+
+      'Which 1-3 sentences are LOAD-BEARING (the argument stands on them)?\n'+
+      'Which are transitional or elaborating (supporting cast)?\n\n'+
+      'STEP 2 — BUDGET: Total highlight budget = '+cap+' words (6% of '+wc+').\n'+
+      'Distribute UNEVENLY — a pivotal sentence may earn 4-5 highlights;\n'+
+      'a transitional sentence earns 0. Total across all sentences ≤ '+cap+'.\n\n'+
+      '"orange" = irreplaceable facts: every specific number, stat, %, measurement, coined term.\n'+
+      '"green" = the actual CLAIM words in load-bearing sentences — not how the claim is described.\n\n'+
+      'NEVER: conclude/find/show/suggest/argue/report/indicate/demonstrate (verbs of attribution),\n'+
+      'explicitly/clearly/strongly/simply (manner adverbs), evidence/research/study/results (filler),\n'+
+      'broad/major/significant/important/key (vague qualifiers), function words.\n\n'+
+      'EXAMPLE — S1 pivotal: "founder age for top 0.1% is 45.0 — entrepreneurs are middle-aged not young"\n'+
+      '→ "0.1%"=orange,"45.0"=orange,"middle-aged"=green,"young"=green | "conclude","explicitly"=null\n'+
+      'EXAMPLE — S2 transitional: "This finding has been replicated across datasets." → all null\n\n'+
+      '{"wordColors":[EXACTLY '+wc+' values, non-null ≤ '+cap+']}\n\nWords: '+chunk.join(' ');
     var raw = await callClaude([{role:'user',content:prompt}], 3000, 'claude-haiku-4-5-20251001');
     if (raw){
       try {
