@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mnemo — speed read anything</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0a0a0a;
+  --surface: #141414;
+  --border:  #222;
+  --text:    #e8e8e8;
+  --muted:   #555;
+  --green:   #00c896;
+  --orange:  #f5a623;
+  --mnemo:   #00b4d8;
+  --accent:  #00c896;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow: hidden;
+}
+
+.screen { display: none; height: 100vh; width: 100%; flex-direction: column; align-items: center; justify-content: center; }
+.screen.active { display: flex; }
+
+/* ── Upload ── */
+#screen-upload { gap: 18px; padding: 32px 24px; overflow-y: auto; }
+
+.logo { font-size: 30px; font-weight: 700; letter-spacing: -1px; }
+.logo .lm   { color: var(--accent); }
+.logo .lnemo { color: var(--text); }
+.logo .ldot  { color: var(--text); opacity: 0.35; }
+.tagline { font-size: 13px; color: var(--muted); margin-top: -12px; }
+
+.drop-zone {
+  width: 100%; max-width: 500px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  padding: 36px 28px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color .2s, background .2s;
+}
+.drop-zone:hover, .drop-zone.over { border-color: var(--accent); background: rgba(0,200,150,.05); }
+.drop-zone .icon { font-size: 32px; margin-bottom: 10px; }
+.drop-zone strong { font-size: 15px; }
+.drop-zone p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+.divider {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; max-width: 500px;
+  color: var(--muted); font-size: 12px;
+}
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+textarea {
+  width: 100%; max-width: 500px; height: 120px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px; font-family: inherit; line-height: 1.6;
+  padding: 12px 14px; resize: none;
+  transition: border-color .2s;
+}
+textarea:focus { outline: none; border-color: var(--accent); }
+textarea::placeholder { color: var(--muted); }
+
+.row {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; max-width: 500px;
+}
+.row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.row .val { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 58px; text-align: right; }
+
+input[type="range"] { flex: 1; accent-color: var(--accent); }
+
+input[type="password"], input[type="text"] {
+  flex: 1;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px; font-family: inherit;
+  padding: 8px 11px;
+  transition: border-color .2s;
+}
+input[type="password"]:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); }
+input::placeholder { color: var(--muted); }
+
+.btn-primary {
+  width: 100%; max-width: 500px;
+  background: var(--accent); color: #000;
+  font-weight: 700; font-size: 15px;
+  padding: 13px; border-radius: 8px;
+  border: none; cursor: pointer; font-family: inherit;
+  transition: opacity .15s;
+}
+.btn-primary:hover { opacity: .85; }
+.btn-primary:disabled { opacity: .3; cursor: default; }
+
+.hint {
+  font-size: 11px; color: var(--muted);
+  max-width: 500px; text-align: center; line-height: 1.6;
+}
+.hint a { color: var(--accent); text-decoration: none; }
+
+#file-input { display: none; }
+
+/* ── Prime ── */
+#screen-prime { gap: 20px; }
+.prime-logo { font-size: 22px; font-weight: 700; }
+.prime-steps { display: flex; flex-direction: column; gap: 6px; width: 260px; }
+.prime-step {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--muted);
+  padding: 7px 10px; border-radius: 8px; transition: all .3s;
+}
+.prime-step.active { color: var(--text); background: var(--surface); }
+.prime-step.done { color: var(--accent); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background .3s; }
+.prime-step.active .dot { background: var(--accent); animation: pulse 1s infinite; }
+.prime-step.done .dot { background: var(--accent); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+.prime-status { font-size: 12px; color: var(--muted); }
+
+/* ── Reader ── */
+#screen-read { position: relative; }
+
+.prog-wrap { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--surface); }
+.prog-bar { height: 100%; background: var(--accent); transition: width .12s linear; }
+
+.reader-top {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 18px 24px; font-size: 11px; color: var(--muted);
+}
+
+.word-wrap {
+  display: flex; align-items: baseline; justify-content: center;
+  font-size: clamp(32px, 7vw, 68px);
+  font-weight: 500; letter-spacing: -.5px;
+  min-width: 320px; user-select: none;
+}
+.w-before { opacity: .45; text-align: right; flex: 1; }
+.w-pivot  { position: relative; }
+.w-pivot::after {
+  content: ''; position: absolute;
+  bottom: -8px; left: 50%; transform: translateX(-50%);
+  width: 2px; height: 6px;
+  background: var(--accent); opacity: .7;
+}
+.w-after { opacity: .45; flex: 1; }
+
+.c-green  { color: var(--green)  !important; opacity: 1 !important; }
+.c-orange { color: var(--orange) !important; opacity: 1 !important; }
+.c-mnemo  { color: var(--mnemo)  !important; opacity: 1 !important; font-weight: 700; }
+
+.reader-bottom {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding: 0 0 28px;
+}
+.reader-wpm-row {
+  display: flex; align-items: center; gap: 12px;
+  width: min(340px, 80vw);
+}
+.reader-wpm-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+.reader-wpm-val { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 58px; text-align: right; }
+.reader-controls {
+  display: flex; align-items: center; gap: 14px;
+}
+.btn-icon {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 50%; width: 42px; height: 42px;
+  font-size: 15px; color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: border-color .2s;
+}
+.btn-icon:hover { border-color: var(--accent); }
+
+/* ── Done ── */
+#screen-done { gap: 16px; }
+.done-title { font-size: 20px; font-weight: 600; }
+.done-stats { font-size: 13px; color: var(--muted); text-align: center; line-height: 2; }
+.btn-secondary {
+  background: var(--surface); color: var(--text);
+  border: 1.5px solid var(--border);
+  font-size: 14px; padding: 9px 22px; border-radius: 8px;
+  font-family: inherit; cursor: pointer; transition: border-color .2s;
+}
+.btn-secondary:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ UPLOAD ════════════════ -->
+<div id="screen-upload" class="screen active">
+  <div class="logo"><span class="lm">m</span><span class="lnemo">nemo</span><span class="ldot">.</span></div>
+  <p class="tagline">speed read anything</p>
+
+  <div class="drop-zone" id="drop-zone">
+    <div class="icon">📄</div>
+    <strong>Drop a .txt or .epub here</strong>
+    <p>or click to browse</p>
+  </div>
+  <input type="file" id="file-input" accept=".txt,.epub">
+
+  <div class="divider">or paste text</div>
+
+  <textarea id="paste-area" placeholder="Paste any text here…"></textarea>
+
+  <div class="row">
+    <label>Speed</label>
+    <input type="range" id="wpm-slider" min="100" max="800" step="10" value="300">
+    <span class="val" id="wpm-display">300 wpm</span>
+  </div>
+
+  <div class="row">
+    <label>🔑</label>
+    <input type="password" id="api-key-input" placeholder="Anthropic key (optional — enables word highlighting)">
+  </div>
+
+  <button class="btn-primary" id="start-btn" disabled>Start Reading</button>
+
+  <p class="hint">
+    No account needed. Text never leaves your device.<br>
+    API key is stored locally in your browser only.
+    <a href="https://console.anthropic.com/" target="_blank">Get a free key →</a>
+  </p>
+</div>
+
+<!-- ════════════════ PRIME ════════════════ -->
+<div id="screen-prime" class="screen">
+  <div class="prime-logo"><span class="lm">m</span><span class="lnemo">nemo</span><span class="ldot">.</span></div>
+  <div class="prime-steps">
+    <div class="prime-step" id="ps0"><div class="dot"></div>Reading text…</div>
+    <div class="prime-step" id="ps1"><div class="dot"></div>Analyzing document…</div>
+    <div class="prime-step" id="ps2"><div class="dot"></div>Scoring word weights…</div>
+    <div class="prime-step" id="ps3"><div class="dot"></div>Preparing reader…</div>
+  </div>
+  <p class="prime-status" id="prime-status">Setting up…</p>
+</div>
+
+<!-- ════════════════ READ ════════════════ -->
+<div id="screen-read" class="screen">
+  <div class="prog-wrap"><div class="prog-bar" id="prog"></div></div>
+  <div class="reader-top">
+    <span id="rpos">0 / 0</span>
+    <span id="rwpm">300 wpm</span>
+  </div>
+  <div class="word-wrap">
+    <span class="w-before" id="wb"></span>
+    <span class="w-pivot"  id="wp"></span>
+    <span class="w-after"  id="wa"></span>
+  </div>
+  <div class="reader-bottom">
+    <div class="reader-wpm-row">
+      <input type="range" id="reader-wpm" min="100" max="800" step="10" value="300">
+      <span class="reader-wpm-val" id="reader-wpm-val">300 wpm</span>
+    </div>
+    <div class="reader-controls">
+      <button class="btn-icon" id="btn-restart" title="Restart">↺</button>
+      <button class="btn-icon" id="btn-pp"      title="Play/Pause">⏸</button>
+      <button class="btn-icon" id="btn-finish"  title="Finish">✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ DONE ════════════════ -->
+<div id="screen-done" class="screen">
+  <div class="done-title">Done ✓</div>
+  <div class="done-stats" id="done-stats"></div>
+  <button class="btn-secondary" id="btn-again">Read again</button>
+  <button class="btn-primary"   id="btn-new"   style="margin-top:4px;max-width:220px">New text</button>
+</div>
+
+<!-- JSZip for epub parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+'use strict';
+
+// ── Constants ──────────────────────────────────────────────────────────
+var BASE_MS     = 196;
+var WEIGHTED_MS = 248;
+var INTRO_MS    = 316;
+
+// ── State ──────────────────────────────────────────────────────────────
+var words       = [];   // [{t: string, c: null|'green'|'orange'|'mnemo'}]
+var idx         = 0;
+var playing     = false;
+var timer       = null;
+var wpm         = 300;
+var startedAt   = 0;
+var apiKey      = '';
+
+// ── DOM shortcuts ──────────────────────────────────────────────────────
+function $(id){ return document.getElementById(id); }
+
+// ── Screen management ──────────────────────────────────────────────────
+function show(name){
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+  $('screen-' + name).classList.add('active');
+}
+
+// ── Tokenizer — splits hyphenated compounds: "two-sided" → ["two","-sided"] ──
+function tokenize(text){
+  var raw = text.split(/\s+/).filter(function(w){ return w.length > 0; });
+  var out = [];
+  raw.forEach(function(w){
+    // Only split if hyphen is internal (not leading/trailing)
+    if (w.indexOf('-') > 0 && w.indexOf('-') < w.length - 1){
+      var parts = w.split('-');
+      parts.forEach(function(p, i){
+        var tok = i === 0 ? p : '-' + p;
+        if (tok.replace(/-/g,'').length > 0) out.push(tok);
+      });
+    } else {
+      out.push(w);
+    }
+  });
+  return out;
+}
+
+// ── Pixel-accurate ORP — anchors at the visual (pixel-width) center ───
+// Uses Canvas measureText so wide chars (W, M) and narrow chars (i, l)
+// are measured correctly. The anchor is the character whose center is
+// closest to half the word's total rendered width.
+var _mc = document.createElement('canvas').getContext('2d');
+_mc.font = '500 100px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+function orp(word){
+  if (!word.length) return { b: '', p: word, a: '' };
+
+  // Measure each character
+  var widths = [];
+  for (var i = 0; i < word.length; i++){
+    widths.push(_mc.measureText(word[i]).width);
+  }
+
+  var total = widths.reduce(function(s, v){ return s + v; }, 0);
+  var half  = total / 2;
+
+  // Walk characters; pick the one whose visual center is closest to half
+  var cum = 0, best = 0, bestDist = Infinity;
+  for (var j = 0; j < word.length; j++){
+    var dist = Math.abs(cum + widths[j] / 2 - half);
+    if (dist < bestDist){ bestDist = dist; best = j; }
+    cum += widths[j];
+  }
+
+  return { b: word.slice(0, best), p: word[best], a: word.slice(best + 1) };
+}
+
+// ── Timing ─────────────────────────────────────────────────────────────
+function msFor(word, i, color){
+  var scale = 350 / wpm;
+  if (i === 0) return INTRO_MS * scale;
+  if (/[.!?]["']?$/.test(word)) return WEIGHTED_MS * 1.5 * scale;
+  if (color) return WEIGHTED_MS * scale;
+  return BASE_MS * scale;
+}
+
+// ── EPUB parser ────────────────────────────────────────────────────────
+async function parseEpub(file){
+  var zip = await JSZip.loadAsync(file);
+
+  var containerXml = await zip.file('META-INF/container.xml').async('text');
+  var opfMatch = containerXml.match(/full-path="([^"]+\.opf)"/);
+  if (!opfMatch) throw new Error('No OPF found in epub');
+  var opfPath = opfMatch[1];
+  var opfDir  = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+
+  var opfText = await zip.file(opfPath).async('text');
+  var parser  = new DOMParser();
+  var opfDoc  = parser.parseFromString(opfText, 'application/xml');
+
+  var manifest = {};
+  opfDoc.querySelectorAll('manifest item').forEach(function(item){
+    manifest[item.getAttribute('id')] = item.getAttribute('href');
+  });
+
+  var spine = Array.from(opfDoc.querySelectorAll('spine itemref'))
+    .map(function(ref){ return manifest[ref.getAttribute('idref')]; })
+    .filter(Boolean);
+
+  var allText = '';
+  for (var si = 0; si < spine.length; si++){
+    var href     = spine[si];
+    var fullPath = opfDir + href;
+    var fileObj  = zip.file(fullPath) || zip.file(decodeURIComponent(fullPath));
+    if (!fileObj) continue;
+    var html = await fileObj.async('text');
+    var doc  = parser.parseFromString(html, 'text/html');
+    doc.querySelectorAll('nav, script, style, head').forEach(function(el){ el.remove(); });
+    allText += (doc.body ? (doc.body.innerText || doc.body.textContent || '') : '') + '\n';
+  }
+  return allText.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ── Rule-based lexical weighting (always runs — no API key needed) ────────
+var STOP = new Set([
+  'the','a','an','and','or','but','in','on','at','to','for','of','with','by',
+  'from','up','about','into','through','during','before','after','above','below',
+  'between','out','off','over','under','again','then','once','here','there',
+  'when','where','why','how','all','both','each','few','more','most','other',
+  'some','such','than','too','very','just','because','as','until','while',
+  'although','this','that','these','those','is','are','was','were','be','been',
+  'being','have','has','had','do','does','did','will','would','could','should',
+  'may','might','shall','can','not','no','nor','so','yet','still','its','it',
+  'he','she','they','we','you','i','me','him','her','us','them','my','your',
+  'his','our','their','what','which','who','whom','whose','said','says','also',
+  'even','only','like','well','much','many','made','make','take','come','go',
+  'get','see','know','think','look','want','give','use','find','tell','ask',
+  'seem','feel','try','leave','call','keep','let','put','mean','become','show',
+  'hear','play','run','move','live','hold','bring','write','sit','stand',
+  'lose','pay','meet','continue','set','learn','change','lead','watch','follow',
+  'stop','read','spend','grow','open','walk','stay','fall','cut','reach',
+  'remain','raise','pass','sell','decide','pull','upon','now','new','old',
+  'own','same','long','little','right','big','great','high','small','large',
+  'next','early','young','public','private','real','best','free','able','back',
+  'already','away','every','never','always','often','since','rather','quite',
+  'among','within','without','against','along','around','toward','towards',
+  'across','behind','beside','near','past','per','plus','via','etc'
+]);
+
+function basicWeight(word, afterSentenceEnd){
+  var clean = word.toLowerCase().replace(/[^a-z]/g, '');
+  if (clean.length <= 2) return null;
+  if (STOP.has(clean))   return null;
+
+  // ALL-CAPS acronym (3+ real letters) → orange
+  if (/^[A-Z]{3,}$/.test(word.replace(/[^A-Za-z]/g,''))) return 'orange';
+
+  // Capitalized mid-sentence = proper noun / technical term → orange
+  if (!afterSentenceEnd && /^[A-Z]/.test(word) && clean.length >= 3) return 'orange';
+
+  // Numbers / statistics → green
+  if (/\d/.test(word)) return 'green';
+
+  // Long rare words → orange; medium uncommon → green
+  if (clean.length >= 10) return 'orange';
+  if (clean.length >= 6)  return 'green';
+
+  return null;
+}
+
+function applyBasicWeights(wordObjs){
+  var prevEnded = true; // treat very first word as sentence-start
+  wordObjs.forEach(function(w){
+    if (w.c === null) w.c = basicWeight(w.t, prevEnded);
+    prevEnded = /[.!?]["']?$/.test(w.t);
+  });
+}
+
+// ── Anthropic (direct, client-side) ────────────────────────────────────
+async function callClaude(messages, maxTokens, model){
+  if (!apiKey) return null;
+  try {
+    var res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-allow-browser': 'true'
+      },
+      body: JSON.stringify({ model: model, max_tokens: maxTokens, messages: messages })
+    });
+    if (!res.ok) return null;
+    var data = await res.json();
+    return (data.content && data.content[0] && data.content[0].text) || null;
+  } catch(e){ return null; }
+}
+
+async function fetchWordColors(wordList, docContext){
+  var CHUNK = 800;
+  var colors = new Array(wordList.length).fill(null);
+  var ctxNote = docContext ? 'DOCUMENT CONTEXT:\n"""' + docContext + '"""\n\n' : '';
+
+  for (var i = 0; i < wordList.length; i += CHUNK){
+    var chunk = wordList.slice(i, i + CHUNK);
+    var wc    = chunk.length;
+    var prompt =
+      'Return ONLY valid JSON.\n' + ctxNote +
+      'Score each word: "green" (important qualifier/action/method), "orange" (core concept/category), or null (everything else).\n' +
+      'LIMIT: 2–4 orange + 4–6 green per 100 words. null for function words, generic verbs, filler.\n' +
+      '{"wordColors":[EXACTLY ' + wc + ' values]}\n\nWords: ' + chunk.join(' ');
+
+    var raw = await callClaude(
+      [{ role: 'user', content: prompt }],
+      3000,
+      'claude-haiku-4-5-20251001'
+    );
+    if (raw){
+      try {
+        var parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+        var arr = parsed.wordColors || [];
+        for (var j = 0; j < Math.min(arr.length, wc); j++){
+          colors[i + j] = arr[j] || null;
+        }
+      } catch(e){}
+    }
+  }
+  return colors;
+}
+
+// ── Priming ────────────────────────────────────────────────────────────
+var primeStepIdx = 0;
+function setPrimeStep(n, msg){
+  primeStepIdx = n;
+  for (var i = 0; i < 4; i++){
+    var el = $('ps' + i);
+    el.className = 'prime-step ' + (i < n ? 'done' : i === n ? 'active' : '');
+  }
+  if (msg) $('prime-status').textContent = msg;
+}
+
+async function primeAndStart(rawText){
+  words = tokenize(rawText).map(function(t){
+    var o = orp(t);
+    return { t: t, c: null, b: o.b, p: o.p, a: o.a };
+  });
+  show('prime');
+  setPrimeStep(0, 'Tokenized ' + words.length.toLocaleString() + ' words…');
+
+  // ── ALWAYS: apply rule-based weighting immediately ──
+  setPrimeStep(1, 'Applying lexical weights…');
+  applyBasicWeights(words);
+
+  if (apiKey){
+    // ── WITH API KEY: upgrade to semantic AI weighting ──
+    var S   = 4000;
+    var mid = Math.floor(rawText.length / 2);
+    var sample = rawText.length > 12000
+      ? rawText.slice(0, S) +
+        '\n\n[...middle...]\n\n' +
+        rawText.slice(Math.max(0, mid - S/2), mid + S/2) +
+        '\n\n[...end...]\n\n' +
+        rawText.slice(-S)
+      : rawText;
+
+    setPrimeStep(1, 'Analyzing document…');
+    var schemaRaw = await callClaude(
+      [{ role: 'user', content:
+        'Return ONLY valid JSON. Analyze this text (beginning, middle, and end sampled).\n' +
+        '{"summary":"2-3 sentences","keywords":["5-8 terms spanning the full text"],"themes":["2-4 major themes"]}\n\n' +
+        'Text:\n"""' + sample.slice(0, 12000) + '"""'
+      }],
+      600, 'claude-haiku-4-5-20251001'
+    );
+
+    var docContext = '';
+    if (schemaRaw){
+      try {
+        var s = JSON.parse(schemaRaw.replace(/```json|```/g, '').trim());
+        docContext = [
+          s.summary || '',
+          s.keywords && s.keywords.length ? 'Key terms: ' + s.keywords.join(', ') : '',
+          s.themes   && s.themes.length   ? 'Themes: '   + s.themes.join(', ')   : ''
+        ].filter(Boolean).join(' | ');
+      } catch(e){}
+    }
+
+    setPrimeStep(2, 'Upgrading with semantic weights…');
+    var colorArr = await fetchWordColors(words.map(function(w){ return w.t; }), docContext);
+    // AI results override the basic weights
+    colorArr.forEach(function(c, i){ if (words[i]) words[i].c = (c !== undefined ? c : words[i].c); });
+  }
+
+  setPrimeStep(3, 'Ready!');
+  await new Promise(function(r){ setTimeout(r, 350); });
+  startReader();
+}
+
+// ── Reader engine ──────────────────────────────────────────────────────
+function startReader(){
+  idx       = 0;
+  playing   = true;
+  startedAt = Date.now();
+  // Sync reader slider to current wpm
+  $('reader-wpm').value = wpm;
+  $('reader-wpm-val').textContent = wpm + ' wpm';
+  show('read');
+  $('btn-pp').textContent = '⏸';
+  tick();
+}
+
+function tick(){
+  if (!playing || idx >= words.length){
+    if (idx >= words.length) finish();
+    return;
+  }
+
+  var w  = words[idx];
+  var cc = w.c ? 'c-' + w.c : '';
+
+  $('wb').textContent = w.b;  $('wb').className = 'w-before ' + cc;
+  $('wp').textContent = w.p;  $('wp').className = 'w-pivot';    // anchor always white
+  $('wa').textContent = w.a;  $('wa').className = 'w-after '  + cc;
+
+  var pct = ((idx + 1) / words.length * 100).toFixed(1);
+  $('prog').style.width = pct + '%';
+  $('rpos').textContent = (idx + 1) + ' / ' + words.length;
+  $('rwpm').textContent = wpm + ' wpm';
+  $('reader-wpm-val').textContent = wpm + ' wpm';
+
+  var delay = msFor(w.t, idx, w.c);
+  idx++;
+  timer = setTimeout(tick, delay);
+}
+
+function togglePlay(){
+  if (playing){
+    playing = false;
+    clearTimeout(timer);
+    $('btn-pp').textContent = '▶';
+  } else {
+    playing = true;
+    $('btn-pp').textContent = '⏸';
+    tick();
+  }
+}
+
+function finish(){
+  playing = false;
+  clearTimeout(timer);
+  var elapsed = (Date.now() - startedAt) / 60000;
+  var actualWpm = elapsed > 0.08 ? Math.round(words.length / elapsed) : wpm;
+  var wpmStr = elapsed > 0.08 ? '~' + actualWpm + ' wpm' : wpm + ' wpm (target)';
+  $('done-stats').innerHTML =
+    words.length.toLocaleString() + ' words<br>' +
+    Math.round(elapsed) + ' min ' + Math.round((elapsed % 1) * 60) + ' sec<br>' +
+    'Average speed: ' + wpmStr;
+  show('done');
+}
+
+// ── File handling ──────────────────────────────────────────────────────
+function getFullText(){
+  var pa = $('paste-area');
+  return pa.dataset.full || pa.value;
+}
+
+function checkReady(){
+  $('start-btn').disabled = getFullText().trim().length < 10;
+}
+
+async function loadFile(file){
+  try {
+    var text = file.name.endsWith('.epub') ? await parseEpub(file) : await file.text();
+    text = text.trim();
+    if (text.length < 10){ alert('File appears empty.'); return; }
+    var pa = $('paste-area');
+    pa.dataset.full = text;
+    pa.value = text.slice(0, 120) + (text.length > 120 ? ' …' : '');
+    checkReady();
+  } catch(e){ alert('Could not read file: ' + e.message); }
+}
+
+// ── Event wiring ───────────────────────────────────────────────────────
+$('drop-zone').addEventListener('click', function(){ $('file-input').click(); });
+$('file-input').addEventListener('change', function(e){ if(e.target.files[0]) loadFile(e.target.files[0]); });
+
+$('drop-zone').addEventListener('dragover',  function(e){ e.preventDefault(); $('drop-zone').classList.add('over'); });
+$('drop-zone').addEventListener('dragleave', function(){ $('drop-zone').classList.remove('over'); });
+$('drop-zone').addEventListener('drop', function(e){
+  e.preventDefault(); $('drop-zone').classList.remove('over');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+$('paste-area').addEventListener('input', function(){
+  delete $('paste-area').dataset.full;
+  checkReady();
+});
+
+$('wpm-slider').addEventListener('input', function(e){
+  wpm = +e.target.value;
+  $('wpm-display').textContent = wpm + ' wpm';
+});
+
+$('api-key-input').addEventListener('input', function(e){
+  apiKey = e.target.value.trim();
+  if (apiKey) localStorage.setItem('mnemo_k', apiKey);
+  else        localStorage.removeItem('mnemo_k');
+});
+
+$('start-btn').addEventListener('click', function(){
+  var text = getFullText().trim();
+  if (text.length < 10) return;
+  primeAndStart(text);
+});
+
+$('btn-pp').addEventListener('click', togglePlay);
+
+$('btn-restart').addEventListener('click', function(){ clearTimeout(timer); startReader(); });
+
+$('btn-finish').addEventListener('click', function(){
+  idx = words.length; // trigger finish on next tick
+  clearTimeout(timer);
+  finish();
+});
+
+$('reader-wpm').addEventListener('input', function(e){
+  wpm = +e.target.value;
+  $('reader-wpm-val').textContent = wpm + ' wpm';
+  $('rwpm').textContent = wpm + ' wpm';
+});
+
+$('btn-again').addEventListener('click', startReader);
+$('btn-new').addEventListener('click', function(){
+  var pa = $('paste-area');
+  pa.value = ''; delete pa.dataset.full;
+  checkReady(); show('upload');
+});
+
+document.addEventListener('keydown', function(e){
+  if (e.code === 'Space' && $('screen-read').classList.contains('active')){
+    e.preventDefault(); togglePlay();
+  }
+});
+
+// Restore saved API key
+(function(){
+  var k = localStorage.getItem('mnemo_k');
+  if (k){ $('api-key-input').value = k; apiKey = k; }
+})();
+</script>
+</body>
+</html>
