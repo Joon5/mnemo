@@ -143,6 +143,24 @@ input::placeholder { color: var(--muted); }
   font-size: 14px; padding: 9px 22px; border-radius: 8px; font-family: inherit;
   cursor: pointer; transition: border-color .2s; }
 .btn-secondary:hover { border-color: var(--accent); }
+
+/* ── TOC overlay ── */
+#toc-overlay { display:none; position:fixed; inset:0; background:rgba(10,10,10,.85); z-index:100; align-items:stretch; }
+#toc-overlay.open { display:flex; }
+#toc-panel { background:var(--surface); border-right:1.5px solid var(--border); width:min(320px,85vw);
+  padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:0; }
+#toc-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-shrink:0; }
+#toc-title { font-size:10px; letter-spacing:.12em; color:var(--accent); font-weight:700; }
+#toc-close { background:none; border:none; color:var(--muted); font-size:16px; cursor:pointer; padding:4px; line-height:1; }
+#toc-close:hover { color:var(--text); }
+#toc-list { display:flex; flex-direction:column; gap:2px; flex:1; }
+.toc-item { padding:9px 11px; border-radius:6px; cursor:pointer; font-size:13px; color:var(--muted);
+  transition:background .15s, color .15s; display:flex; align-items:flex-start; gap:10px; border:none;
+  background:none; width:100%; text-align:left; font-family:inherit; }
+.toc-item:hover { background:rgba(255,255,255,.05); color:var(--text); }
+.toc-item.cur { border-left:3px solid var(--accent); color:var(--accent); padding-left:8px; }
+.toc-num { font-size:9px; color:var(--muted); min-width:18px; margin-top:2px; flex-shrink:0; }
+.toc-empty { font-size:12px; color:var(--muted); padding:10px; text-align:center; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -153,10 +171,10 @@ input::placeholder { color: var(--muted); }
   <p class="tagline">speed read anything</p>
   <div class="drop-zone" id="drop-zone">
     <div class="icon">📄</div>
-    <strong>Drop a .txt or .epub here</strong>
+    <strong>Drop a .txt, .epub or .pdf here</strong>
     <p>or click to browse</p>
   </div>
-  <input type="file" id="file-input" accept=".txt,.epub">
+  <input type="file" id="file-input" accept=".txt,.epub,.pdf">
   <div class="divider">or paste text</div>
   <textarea id="paste-area" placeholder="Paste any text here…"></textarea>
   <div class="row">
@@ -195,6 +213,7 @@ input::placeholder { color: var(--muted); }
   <div class="reader-top">
     <span class="reader-pos" id="rpos">0 / 0</span>
     <div class="reader-top-right">
+      <button class="mini-btn" id="btn-toc">☰ TOC</button>
       <button class="mini-btn" id="btn-save">Save</button>
       <button class="mini-btn" id="btn-text-view">Text view</button>
     </div>
@@ -240,6 +259,17 @@ input::placeholder { color: var(--muted); }
   <button class="btn-primary" id="btn-new" style="margin-top:4px;max-width:220px">New text</button>
 </div>
 
+<!-- ════ TOC OVERLAY ════ -->
+<div id="toc-overlay">
+  <div id="toc-panel">
+    <div id="toc-header">
+      <span id="toc-title">TABLE OF CONTENTS</span>
+      <button id="toc-close">✕</button>
+    </div>
+    <div id="toc-list"></div>
+  </div>
+</div>
+
 <!-- ════ SAVE TOAST ════ -->
 <div class="save-toast" id="save-toast">
   <div class="save-toast-title">📌 Progress saved</div>
@@ -248,6 +278,7 @@ input::placeholder { color: var(--muted); }
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 'use strict';
 
@@ -259,6 +290,7 @@ var INTRO_MS    = 316;
 // ── State ──────────────────────────────────────────────────────────────
 var words          = [];   // {t, c, b, p, a}
 var sentenceStarts = [];
+var chapters       = [];   // [{title, startIdx}]
 var textSpans      = [];
 var textViewBuilt  = false;
 var curHighlight   = null;
@@ -449,6 +481,91 @@ async function parseEpub(file){
   return allText.replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// ── PDF parser ─────────────────────────────────────────────────────────
+async function parsePdf(file){
+  var lib = window['pdfjs-dist/build/pdf'];
+  lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  var data = await file.arrayBuffer();
+  var pdf  = await lib.getDocument({ data: data }).promise;
+  var out  = '';
+  for (var p = 1; p <= pdf.numPages; p++){
+    var page    = await pdf.getPage(p);
+    var content = await page.getTextContent();
+    var prev = null;
+    content.items.forEach(function(item){
+      // Insert newline when there's a significant vertical gap (new paragraph/heading)
+      if (prev && Math.abs(item.transform[5] - prev.transform[5]) > 10) out += '\n';
+      out += item.str + (item.hasEOL ? '\n' : ' ');
+      prev = item;
+    });
+    out += '\n\n';
+  }
+  return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ── Chapter / TOC detection ────────────────────────────────────────────
+function detectChapters(rawText){
+  var chaps = [];
+  var lines = rawText.split('\n');
+  var wordIdx = 0;
+  var CHAPTER_RE = /^(chapter|section|part|unit|lecture|week|appendix)\s*[\d\w]/i;
+  var NUMBERED_RE = /^\d+[\.\)]\s+[A-Z]/;
+
+  for (var i = 0; i < lines.length; i++){
+    var line = lines[i].trim();
+    if (!line){ continue; }
+    var tokens = line.split(/\s+/).filter(function(w){ return w.length > 0; });
+    var wc = tokens.length;
+
+    if (wc >= 1 && wc <= 8){
+      var isHeading = false;
+      if (CHAPTER_RE.test(line)) isHeading = true;
+      else if (NUMBERED_RE.test(line) && wc <= 7) isHeading = true;
+      else if (wc <= 5 && line === line.toUpperCase() && /[A-Z]{2}/.test(line)) isHeading = true;
+
+      if (isHeading){
+        var title = line.length > 60 ? line.slice(0,57)+'…' : line;
+        chaps.push({ title: title, startIdx: wordIdx });
+      }
+    }
+    wordIdx += wc;
+  }
+  return chaps;
+}
+
+// ── TOC panel ─────────────────────────────────────────────────────────
+function buildTocPanel(){
+  var list = $('toc-list');
+  list.innerHTML = '';
+  if (!chapters.length){
+    var empty = document.createElement('div');
+    empty.className = 'toc-empty';
+    empty.textContent = 'No chapters detected in this text.';
+    list.appendChild(empty);
+    return;
+  }
+  chapters.forEach(function(ch, i){
+    var btn = document.createElement('button');
+    btn.className = 'toc-item' + (idx >= ch.startIdx && (i === chapters.length-1 || idx < chapters[i+1].startIdx) ? ' cur' : '');
+    btn.innerHTML = '<span class="toc-num">'+(i+1)+'</span><span>'+ch.title+'</span>';
+    btn.addEventListener('click', function(){
+      seekTo(ch.startIdx);
+      closeToc();
+      if (!playing){ playing = true; syncPlayIcons(); tick(); }
+    });
+    list.appendChild(btn);
+  });
+}
+
+function openToc(){
+  buildTocPanel();
+  $('toc-overlay').classList.add('open');
+}
+
+function closeToc(){
+  $('toc-overlay').classList.remove('open');
+}
+
 // ── Anthropic API (client-side) ────────────────────────────────────────
 async function callClaude(messages, maxTokens, model){
   if (!apiKey) return null;
@@ -497,6 +614,7 @@ async function primeAndStart(rawText){
   // Reset text view state
   textViewBuilt = false; textSpans = []; curHighlight = null; lastScrollIdx = -1;
   $('text-body').innerHTML = '';
+  chapters = detectChapters(rawText);
 
   words = tokenize(rawText).map(function(t){
     var o = orp(t);
@@ -715,7 +833,11 @@ function checkReady(){ $('start-btn').disabled = getFullText().trim().length < 1
 
 async function loadFile(file){
   try {
-    var text = file.name.toLowerCase().endsWith('.epub') ? await parseEpub(file) : await file.text();
+    var name = file.name.toLowerCase();
+    var text;
+    if (name.endsWith('.epub'))     text = await parseEpub(file);
+    else if (name.endsWith('.pdf')) text = await parsePdf(file);
+    else                            text = await file.text();
     text = text.trim();
     if (text.length < 10){ alert('File appears empty.'); return; }
     var pa = $('paste-area');
@@ -777,6 +899,11 @@ $('btn-save-text').addEventListener('click', saveProgress);
 // Text view toggle
 $('btn-text-view').addEventListener('click', openTextView);
 $('btn-back-to-read').addEventListener('click', function(){ show('read'); });
+
+// TOC
+$('btn-toc').addEventListener('click', openToc);
+$('toc-close').addEventListener('click', closeToc);
+$('toc-overlay').addEventListener('click', function(e){ if (e.target === $('toc-overlay')) closeToc(); });
 
 // WPM slider (reader)
 $('reader-wpm').addEventListener('input', function(e){
