@@ -593,10 +593,24 @@ async function fetchWordColors(wordList, docContext){
   var ctxNote = docContext ? 'DOCUMENT CONTEXT:\n"""'+docContext+'"""\n\n' : '';
   for (var i = 0; i < wordList.length; i += CHUNK){
     var chunk = wordList.slice(i, i+CHUNK), wc = chunk.length;
-    var prompt = 'Return ONLY valid JSON.\n'+ctxNote+
-      'Score each word: "green" (important qualifier/action), "orange" (core concept), or null.\n'+
-      'LIMIT: 2–4 orange + 4–6 green per 100 words.\n'+
-      '{"wordColors":[EXACTLY '+wc+' values]}\n\nWords: '+chunk.join(' ');
+    var cap = Math.max(2, Math.round(wc * 0.06));
+    var prompt = 'Return ONLY valid JSON. You are an EXTREMELY SELECTIVE semantic highlighter.\n\n'+ctxNote+
+      'HARD CAP: at most '+cap+' highlighted words in these '+wc+' words. Default is null.\n\n'+
+      'WHAT TO HIGHLIGHT:\n'+
+      '"orange" — specific numbers, statistics, percentages, measurements (e.g. "45.0", "2.7 million", "0.1%", "80%").\n'+
+      '  These are irreplaceable — a reader cannot reconstruct them from context. ALWAYS orange.\n'+
+      '"green" — the single key FINDING per sentence. One word a student would write in their notes.\n'+
+      '  Ask: what is this sentence ultimately saying? That word gets green. Nothing else in the sentence does.\n\n'+
+      'NEVER HIGHLIGHT:\n'+
+      '• Verbs of attribution: conclude, find, show, suggest, argue, report, indicate, demonstrate, note, state\n'+
+      '• Adverbs: explicitly, clearly, strongly, simply, importantly\n'+
+      '• Process/evidence words: evidence, research, study, data, analysis, results, findings\n'+
+      '• Generic qualifiers: broad, large-scale, major, significant, important, strong, weak\n'+
+      '• Any word inferable from surrounding context\n'+
+      '• 2+ consecutive words highlighted — keep only the most essential ONE per cluster\n\n'+
+      'EXAMPLE: "the authors explicitly conclude that entrepreneurs are middle-aged, not young"\n'+
+      '→ "middle-aged"=green, everything else=null. NOT "explicitly", NOT "conclude", NOT "entrepreneurs"\n\n'+
+      '{"wordColors":[EXACTLY '+wc+' values, total non-null ≤ '+cap+']}\n\nWords: '+chunk.join(' ');
     var raw = await callClaude([{role:'user',content:prompt}], 3000, 'claude-haiku-4-5-20251001');
     if (raw){
       try {

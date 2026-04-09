@@ -1225,52 +1225,58 @@ function MnemoAppInner() {
       ? 'DOCUMENT CONTEXT (global themes and key terms — use this to understand what matters across the whole text):\n"""' + docContext + '"""\n\n'
       : '';
 
-    const maxPct = Math.round(wc * 0.08);
+    const maxPct = Math.round(wc * 0.06); // 6% hard cap — research optimal for salient emphasis
     const prompt =
-      'Return ONLY valid JSON. You are a MINIMALIST semantic highlighter for a speed-reading app.\n\n' +
+      'Return ONLY valid JSON. You are an EXTREMELY SELECTIVE semantic highlighter for a speed-reading app.\n\n' +
       docNote +
       'FULL PASSAGE CONTEXT:\n"""' + contextText.slice(0, 3000) + '"""\n\n' +
-      '═══ CORE PRINCIPLE: SPARSITY ═══\n' +
-      'Research shows highlighting loses all value above ~10% of words (Dunlosky et al., 2013; Mayer signaling research).\n' +
-      'When everything is emphasized, nothing is. YOUR HARD CAP: highlight at most ' + maxPct + ' words in this ' + wc + '-word block.\n' +
-      'When in doubt, return null. A word left un-highlighted is almost always the right call.\n\n' +
-      '═══ THE IRREPLACEABILITY TEST ═══\n' +
-      'For each candidate word, ask: "If the reader forgot this single word, would they lose the argument?"\n' +
-      '• Numbers, statistics, percentages → YES (cannot be reconstructed from context) → ALWAYS highlight\n' +
-      '• Named mechanisms on first use → YES (e.g. "visual anchor", "semantic weight") → highlight\n' +
-      '• Brand/product names central to the text → YES (e.g. "Mnemo") → highlight\n' +
-      '• Common words like "brains", "process", "reading", "simply" → NO → null\n' +
-      '• Words already implied by surrounding context → NO → null\n\n' +
-      '═══ PRIORITY ORDER (stop when cap is reached) ═══\n' +
-      '1. NUMBERS & STATISTICS ("orange"): Every specific number, percentage, or measurement in the passage.\n' +
-      '   These are irreplaceable — a reader cannot reconstruct "13 milliseconds" or "80%" from context.\n' +
-      '   → e.g. "13", "milliseconds", "250", "WPM", "80%", "12-point"\n\n' +
-      '2. NAMED MECHANISMS & FIRST-USE TECHNICAL TERMS ("orange"): The text\'s own coined/specialist terms.\n' +
-      '   Highlight ALL words in a multi-word unit (e.g. "visual" AND "anchor" both get orange).\n' +
-      '   Only on FIRST occurrence — never repeat.\n' +
-      '   → e.g. "visual anchor", "semantic weight", "saccadic"\n\n' +
-      '3. CONCEPTUAL OPPOSITIONS ("green"): Words that signal a paradigm shift or stark contrast.\n' +
-      '   The contrast IS the argument — missing it means missing the point.\n' +
-      '   → e.g. "linear" (old paradigm), "infinite" (new paradigm), "biological" (metaphor reframe)\n\n' +
-      '4. SCHEMA-BREAKING CLAIMS ("green"): Statements that contradict the reader\'s expected beliefs.\n' +
-      '   Words that make a reader stop and think "really?"\n' +
-      '   → e.g. "skipped" (80% skipped — alarming), "expected" (habit-of-mind critique)\n\n' +
-      '5. PRODUCT/BRAND NAME ("orange"): The proper noun central to the argument — only first occurrence.\n\n' +
-      '═══ NEVER HIGHLIGHT ═══\n' +
-      '• Function words: the, a, an, of, in, that, which, and, or, but, with, by, to, for, from, is, are, was, were\n' +
-      '• Common adjectives/adverbs recoverable from context: simply, real, limited, full, average, past\n' +
-      '• Domain-general terms the reader already knows: brains, process, images, reading, text, words\n' +
-      '• Words that merely restate what surrounding words already convey\n' +
-      '• Anything past your cap of ' + maxPct + ' highlights\n\n' +
+      '═══ CORE LAW: SPARSITY ═══\n' +
+      'Cognitive load research (Sweller 1988; Dunlosky et al. 2013; Mayer signaling studies) shows:\n' +
+      '— Highlighting above 10% is WORSE than no highlighting at all. The contrast collapses.\n' +
+      '— Optimal retention highlighting: 5–6% of words. That is your ceiling.\n' +
+      'HARD CAP: at most ' + maxPct + ' highlighted words in this ' + wc + '-word block.\n' +
+      'When in doubt, null. Unhighlighted words are the correct default.\n\n' +
+      '═══ THE ONE TEST THAT MATTERS ═══\n' +
+      'For each word: "Could a reader reconstruct or infer this from the surrounding words?"\n' +
+      '• If YES → null, always.\n' +
+      '• If NO → candidate for highlight.\n' +
+      'Numbers and specific figures almost always pass. Verbs and adjectives almost never pass.\n\n' +
+      '═══ WHAT TO HIGHLIGHT (strict priority — stop when cap reached) ═══\n\n' +
+      '"orange" — IRREPLACEABLE FACTS:\n' +
+      '  1. Every specific number, statistic, percentage, age, ratio, or measurement.\n' +
+      '     → "45.0", "2.7", "million", "0.1%", "1.8", "13", "250", "80%"\n' +
+      '     → If a reader forgets "45.0" they lose the fact entirely. Always orange.\n' +
+      '  2. The text\'s coined or domain-specific technical term, on first use only.\n' +
+      '     Highlight ALL words in the unit: "visual" AND "anchor" both orange.\n\n' +
+      '"green" — THE SINGLE KEY FINDING PER SENTENCE:\n' +
+      '  Ask: "What is the one word a student would write in their notes from this sentence?"\n' +
+      '  That word — and only that word — gets green. Not the verb that introduces it.\n' +
+      '  → In "the authors conclude entrepreneurs are middle-aged, not young":\n' +
+      '     "middle-aged" → green. "conclude", "authors", "explicitly" → all null.\n' +
+      '  → In "success skews older, not younger": "older" → green. "skews", "success" → null.\n' +
+      '  → ONE green word per sentence maximum. Often zero.\n\n' +
+      '═══ ABSOLUTE NEVER-HIGHLIGHT LIST ═══\n' +
+      '• Verbs of attribution/citation: conclude, find, show, suggest, argue, report, indicate,\n' +
+      '  demonstrate, note, state, claim, prove, reveal, confirm, establish — ALWAYS null\n' +
+      '• Adverbs of manner: explicitly, clearly, strongly, simply, directly, importantly — ALWAYS null\n' +
+      '• Process words: evidence, research, study, data, analysis, results, findings — null unless\n' +
+      '  this text is specifically defining what "evidence" or "research" means as a concept\n' +
+      '• All function words: the, a, an, of, in, that, which, and, or, but, with, by, to, for, from\n' +
+      '• Generic academic words: broad, large-scale, major, significant, important, key, strong, weak\n' +
+      '• Second/third mentions of any concept already highlighted\n' +
+      '• Any word that is merely a synonym or restatement of an already-highlighted word\n\n' +
+      '═══ ANTI-CLUSTER RULE ═══\n' +
+      'If 2 or more consecutive words would be highlighted, keep only the most essential ONE.\n' +
+      'A cluster of green destroys the signal. Space highlights across the passage.\n\n' +
       '═══ FAMILIARITY DECAY ═══\n' +
-      'Do NOT re-highlight concepts already established earlier in the text.\n' +
       familiarNote + '\n\n' +
-      '═══ EXAMPLE (target ~7% density) ═══\n' +
-      'Text: "Linear text was built for the printing press, not for cognition. But today, digital real estate is infinite."\n' +
-      'Words: [Linear, text, was, built, for, the, printing, press, not, for, cognition, But, today, digital, real, estate, is, infinite]\n' +
-      'Colors: ["green", null, null, null, null, null, null, null, null, null, "orange", null, null, null, null, null, null, "green"]\n' +
-      '(Linear→green contrast term; cognition→orange core concept; infinite→green contrasting term; printing/press/digital/real/estate→all null)\n\n' +
-      '{"wordColors":[EXACTLY ' + wc + ' values, one per word, total non-null values ≤ ' + maxPct + ']}\n\n' +
+      '═══ CALIBRATION EXAMPLE ═══\n' +
+      'Text (25 words): "The mean founder age for the fastest-growing 0.1% of startups is 45.0, and the authors explicitly conclude that successful entrepreneurs are middle-aged, not young."\n' +
+      'CORRECT output (3 highlights = 12%... too high — but shows which words):\n' +
+      '  "0.1%" → orange (statistic), "45.0" → orange (statistic), "middle-aged" → green (key finding)\n' +
+      '  "fastest-growing" → null, "startups" → null, "authors" → null, "explicitly" → null,\n' +
+      '  "conclude" → null, "successful" → null, "entrepreneurs" → null\n\n' +
+      '{"wordColors":[EXACTLY ' + wc + ' values, one per word, total non-null ≤ ' + maxPct + ']}\n\n' +
       'Words to score (' + wc + '): ' + wl;
 
     // Use Sonnet for semantic weighting — requires deep language understanding
