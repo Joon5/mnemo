@@ -68,7 +68,7 @@ class ErrorBoundary extends React.Component<
 
 // ── Timing constants (matches original spec) ──
 const BASE_DELAY = Math.round(((60000 / 350) * 0.8 * 0.7)); // ~196ms
-const WEIGHTED_DELAY = Math.round(300 * 0.7); // ~210ms
+const WEIGHTED_DELAY = Math.round(BASE_DELAY * 1.3); // 30% longer than base (~255ms)
 const INTRO_DELAY = Math.round(BASE_DELAY * 1.1) + 100; // ~316ms
 
 type Screen = "intake" | "prime" | "reader" | "summary";

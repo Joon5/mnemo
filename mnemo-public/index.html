@@ -221,12 +221,12 @@ input::placeholder { color: var(--muted); }
 <div id="screen-text" class="screen">
   <div class="text-nav">
     <div class="text-nav-left">
-      <button class="mini-btn" id="btn-back-to-read">⚡ Speed</button>
+      <button class="btn-icon" style="width:34px;height:34px;font-size:13px" id="btn-pp-text">⏸</button>
       <span class="text-nav-pos" id="text-pos">0 / 0</span>
     </div>
     <div class="text-nav-right">
       <button class="mini-btn" id="btn-save-text">Save</button>
-      <button class="btn-icon" style="width:34px;height:34px;font-size:13px" id="btn-pp-text">⏸</button>
+      <button class="mini-btn" id="btn-back-to-read">mnemo</button>
     </div>
   </div>
   <div class="text-body" id="text-body"></div>
@@ -253,7 +253,7 @@ input::placeholder { color: var(--muted); }
 
 // ── Constants ──────────────────────────────────────────────────────────
 var BASE_MS     = 196;
-var WEIGHTED_MS = 248;
+var WEIGHTED_MS = Math.round(BASE_MS * 1.3); // 30% longer than base (~255ms)
 var INTRO_MS    = 316;
 
 // ── State ──────────────────────────────────────────────────────────────
