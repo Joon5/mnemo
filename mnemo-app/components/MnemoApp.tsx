@@ -412,7 +412,7 @@ function MnemoAppInner() {
 
   // ── Word estimate ──
   const wordCount = inputText.trim() ? tok(inputText).length : 0;
-  const estMins = Math.max(1, Math.round(wordCount / 350));
+  const estMins = wordCount > 0 ? Math.max(1, Math.round(wordCount / wpm)) : 0;
   const estPages = Math.max(1, Math.round(wordCount / 238));
 
   // ── File upload ──
@@ -2128,7 +2128,7 @@ function MnemoAppInner() {
             {/* Estimates */}
             <div className={`est-row${wordCount > 20 ? " vis" : ""}`}>
               <div className="est-pill"><span className="en">{wordCount.toLocaleString()}</span> words</div>
-              <div className="est-pill">~<span className="en">{estMins}</span> min</div>
+              <div className="est-pill">~<span className="en">{estMins}</span> min at {wpm} WPM</div>
               <div className="est-pill">~<span className="en">{estPages}</span> pages</div>
             </div>
 

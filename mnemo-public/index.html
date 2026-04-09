@@ -143,6 +143,11 @@ input::placeholder { color: var(--muted); }
   font-size: 14px; padding: 9px 22px; border-radius: 8px; font-family: inherit;
   cursor: pointer; transition: border-color .2s; }
 .btn-secondary:hover { border-color: var(--accent); }
+#read-time { font-size:12px; color:var(--muted); width:100%; max-width:500px; display:flex; gap:12px;
+  align-items:center; min-height:18px; transition:opacity .2s; }
+#read-time .rt-pill { background:var(--surface); border:1px solid var(--border); border-radius:20px;
+  padding:3px 10px; font-size:11px; display:flex; align-items:center; gap:4px; }
+#read-time .rt-n { color:var(--accent); font-weight:700; }
 
 /* ── TOC overlay ── */
 #toc-overlay { display:none; position:fixed; inset:0; background:rgba(10,10,10,.85); z-index:100; align-items:stretch; }
@@ -186,6 +191,7 @@ input::placeholder { color: var(--muted); }
     <label>🔑</label>
     <input type="password" id="api-key-input" placeholder="Anthropic key (optional — enables AI word highlighting)">
   </div>
+  <div id="read-time"></div>
   <button class="btn-primary" id="start-btn" disabled>Start Reading</button>
   <p class="hint">No account needed. Text never leaves your device.<br>
     API key stored locally in your browser only.
@@ -829,7 +835,25 @@ function seekFromX(clientX){
 
 // ── File handling ──────────────────────────────────────────────────────
 function getFullText(){ var pa=$('paste-area'); return pa.dataset.full||pa.value; }
-function checkReady(){ $('start-btn').disabled = getFullText().trim().length < 10; }
+
+function updateReadTime(){
+  var text = getFullText().trim();
+  var wc   = text.length > 0 ? text.split(/\s+/).filter(function(w){ return w.length > 0; }).length : 0;
+  var rt   = $('read-time');
+  if (wc < 10){ rt.innerHTML = ''; return; }
+  var mins  = Math.max(1, Math.round(wc / wpm));
+  var pages = Math.max(1, Math.round(wc / 238));
+  rt.innerHTML =
+    '<div class="rt-pill"><span class="rt-n">'+wc.toLocaleString()+'</span> words</div>' +
+    '<div class="rt-pill">~<span class="rt-n">'+mins+'</span> min at '+wpm+' WPM</div>' +
+    '<div class="rt-pill">~<span class="rt-n">'+pages+'</span> pages</div>';
+}
+
+function checkReady(){
+  var ok = getFullText().trim().length >= 10;
+  $('start-btn').disabled = !ok;
+  updateReadTime();
+}
 
 async function loadFile(file){
   try {
@@ -859,7 +883,7 @@ $('drop-zone').addEventListener('drop', function(e){
   if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
 });
 $('paste-area').addEventListener('input', function(){ delete $('paste-area').dataset.full; checkReady(); });
-$('wpm-slider').addEventListener('input', function(e){ wpm=+e.target.value; $('wpm-display').textContent=wpm+' wpm'; });
+$('wpm-slider').addEventListener('input', function(e){ wpm=+e.target.value; $('wpm-display').textContent=wpm+' wpm'; updateReadTime(); });
 $('api-key-input').addEventListener('input', function(e){
   apiKey = e.target.value.trim();
   if (apiKey) localStorage.setItem('mnemo_k',apiKey); else localStorage.removeItem('mnemo_k');
