@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mnemo — speed read anything</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #0a0a0a;  --surface: #141414;  --border:  #222;
+  --text:    #e8e8e8;  --muted:   #555;
+  --green:   #00c896;  --orange:  #f5a623;  --mnemo: #00b4d8;  --accent: #00c896;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; }
+.screen { display: none; height: 100vh; width: 100%; flex-direction: column; align-items: center; justify-content: center; }
+.screen.active { display: flex; }
+
+/* ── Upload ── */
+#screen-upload { gap: 18px; padding: 32px 24px; overflow-y: auto; }
+.logo { font-size: 30px; font-weight: 700; letter-spacing: -1px; }
+.logo .lm { color: var(--accent); } .logo .lnemo { color: var(--text); } .logo .ldot { color: var(--text); opacity: .35; }
+.tagline { font-size: 13px; color: var(--muted); margin-top: -12px; }
+.drop-zone { width: 100%; max-width: 500px; border: 1.5px dashed var(--border); border-radius: 12px;
+  padding: 36px 28px; text-align: center; cursor: pointer; background: var(--surface);
+  transition: border-color .2s, background .2s; }
+.drop-zone:hover, .drop-zone.over { border-color: var(--accent); background: rgba(0,200,150,.05); }
+.drop-zone .icon { font-size: 32px; margin-bottom: 10px; }
+.drop-zone strong { font-size: 15px; }
+.drop-zone p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.divider { display: flex; align-items: center; gap: 14px; width: 100%; max-width: 500px; color: var(--muted); font-size: 12px; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+textarea { width: 100%; max-width: 500px; height: 120px; background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 14px; font-family: inherit; line-height: 1.6;
+  padding: 12px 14px; resize: none; transition: border-color .2s; }
+textarea:focus { outline: none; border-color: var(--accent); }
+textarea::placeholder { color: var(--muted); }
+.row { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 500px; }
+.row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.row .val { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 58px; text-align: right; }
+input[type="range"] { flex: 1; accent-color: var(--accent); }
+input[type="password"], input[type="text"] { flex: 1; background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 13px; font-family: inherit; padding: 8px 11px; transition: border-color .2s; }
+input[type="password"]:focus, input[type="text"]:focus { outline: none; border-color: var(--accent); }
+input::placeholder { color: var(--muted); }
+.btn-primary { width: 100%; max-width: 500px; background: var(--accent); color: #000;
+  font-weight: 700; font-size: 15px; padding: 13px; border-radius: 8px;
+  border: none; cursor: pointer; font-family: inherit; transition: opacity .15s; }
+.btn-primary:hover { opacity: .85; } .btn-primary:disabled { opacity: .3; cursor: default; }
+.hint { font-size: 11px; color: var(--muted); max-width: 500px; text-align: center; line-height: 1.6; }
+.hint a { color: var(--accent); text-decoration: none; }
+#file-input { display: none; }
+
+/* ── Prime ── */
+#screen-prime { gap: 20px; }
+.prime-logo { font-size: 22px; font-weight: 700; }
+.prime-steps { display: flex; flex-direction: column; gap: 6px; width: 260px; }
+.prime-step { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); padding: 7px 10px; border-radius: 8px; transition: all .3s; }
+.prime-step.active { color: var(--text); background: var(--surface); }
+.prime-step.done { color: var(--accent); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background .3s; }
+.prime-step.active .dot { background: var(--accent); animation: pulse 1s infinite; }
+.prime-step.done .dot { background: var(--accent); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+.prime-status { font-size: 12px; color: var(--muted); }
+
+/* ── Reader ── */
+#screen-read { position: relative; }
+
+/* Thicker scrubable progress bar */
+.prog-wrap { position: absolute; top: 0; left: 0; right: 0; height: 8px;
+  background: var(--surface); cursor: pointer; z-index: 10; }
+.prog-bar { height: 100%; background: var(--accent); transition: width .1s linear; pointer-events: none; }
+.prog-thumb { position: absolute; top: 50%; transform: translate(-50%,-50%);
+  width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
+  pointer-events: none; opacity: 0; transition: opacity .15s; }
+.prog-wrap:hover .prog-thumb { opacity: 1; }
+
+.reader-top { position: absolute; top: 8px; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; }
+.reader-pos { font-size: 11px; color: var(--muted); }
+.reader-top-right { display: flex; gap: 8px; }
+.mini-btn { background: transparent; border: 1px solid var(--border); color: var(--muted);
+  font-size: 11px; font-family: inherit; padding: 4px 10px; border-radius: 20px;
+  cursor: pointer; transition: border-color .2s, color .2s; }
+.mini-btn:hover { border-color: var(--accent); color: var(--text); }
+
+.word-wrap { display: flex; align-items: baseline; justify-content: center;
+  font-size: clamp(32px, 7vw, 68px); font-weight: 500; letter-spacing: -.5px;
+  min-width: 320px; user-select: none; }
+.w-before { opacity: .45; text-align: right; flex: 1; }
+.w-pivot { position: relative; }
+.w-pivot::after { content: ''; position: absolute; bottom: -8px; left: 50%;
+  transform: translateX(-50%); width: 2px; height: 6px; background: var(--accent); opacity: .7; }
+.w-after { opacity: .45; flex: 1; }
+.c-green  { color: var(--green)  !important; opacity: 1 !important; }
+.c-orange { color: var(--orange) !important; opacity: 1 !important; }
+.c-mnemo  { color: var(--mnemo)  !important; opacity: 1 !important; font-weight: 700; }
+
+.reader-bottom { position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0 0 24px; }
+.reader-wpm-row { display: flex; align-items: center; gap: 12px; width: min(340px, 80vw); }
+.reader-wpm-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+.reader-wpm-val { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 58px; text-align: right; }
+.reader-controls { display: flex; align-items: center; gap: 14px; }
+.btn-icon { background: var(--surface); border: 1.5px solid var(--border); border-radius: 50%;
+  width: 42px; height: 42px; font-size: 15px; color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: border-color .2s; user-select: none; }
+.btn-icon:hover { border-color: var(--accent); }
+
+/* ── Text view ── */
+#screen-text { justify-content: flex-start; align-items: stretch; }
+.text-nav { display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.text-nav-left { display: flex; align-items: center; gap: 10px; }
+.text-nav-right { display: flex; align-items: center; gap: 8px; }
+.text-nav-pos { font-size: 11px; color: var(--muted); }
+.text-body { flex: 1; overflow-y: auto; padding: 24px 28px;
+  line-height: 1.9; font-size: 16px; max-width: 760px; align-self: center; width: 100%; }
+.tw { cursor: pointer; border-radius: 2px; }
+.tw:hover { background: rgba(255,255,255,.07); }
+.tw.current { background: rgba(0,200,150,.18); border-radius: 3px; outline: 1px solid rgba(0,200,150,.4); }
+.tc-green  { color: var(--green); }
+.tc-orange { color: var(--orange); }
+.tc-mnemo  { color: var(--mnemo); font-weight: 700; }
+
+/* ── Save toast ── */
+.save-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(16px);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; width: min(420px, 92vw);
+  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 200; }
+.save-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.save-toast-title { font-size: 11px; color: var(--accent); font-weight: 600; margin-bottom: 6px; }
+.save-toast-ctx { font-size: 13px; color: var(--text); line-height: 1.65; opacity: .8; }
+.save-toast-pos { font-size: 11px; color: var(--muted); margin-top: 7px; }
+
+/* ── Done ── */
+#screen-done { gap: 16px; }
+.done-title { font-size: 20px; font-weight: 600; }
+.done-stats { font-size: 13px; color: var(--muted); text-align: center; line-height: 2; }
+.btn-secondary { background: var(--surface); color: var(--text); border: 1.5px solid var(--border);
+  font-size: 14px; padding: 9px 22px; border-radius: 8px; font-family: inherit;
+  cursor: pointer; transition: border-color .2s; }
+.btn-secondary:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- ════ UPLOAD ════ -->
+<div id="screen-upload" class="screen active">
+  <div class="logo"><span class="lm">m</span><span class="lnemo">nemo</span><span class="ldot">.</span></div>
+  <p class="tagline">speed read anything</p>
+  <div class="drop-zone" id="drop-zone">
+    <div class="icon">📄</div>
+    <strong>Drop a .txt or .epub here</strong>
+    <p>or click to browse</p>
+  </div>
+  <input type="file" id="file-input" accept=".txt,.epub">
+  <div class="divider">or paste text</div>
+  <textarea id="paste-area" placeholder="Paste any text here…"></textarea>
+  <div class="row">
+    <label>Speed</label>
+    <input type="range" id="wpm-slider" min="100" max="800" step="10" value="300">
+    <span class="val" id="wpm-display">300 wpm</span>
+  </div>
+  <div class="row">
+    <label>🔑</label>
+    <input type="password" id="api-key-input" placeholder="Anthropic key (optional — enables AI word highlighting)">
+  </div>
+  <button class="btn-primary" id="start-btn" disabled>Start Reading</button>
+  <p class="hint">No account needed. Text never leaves your device.<br>
+    API key stored locally in your browser only.
+    <a href="https://console.anthropic.com/" target="_blank">Get a free key →</a></p>
+</div>
+
+<!-- ════ PRIME ════ -->
+<div id="screen-prime" class="screen">
+  <div class="prime-logo"><span class="lm">m</span><span class="lnemo">nemo</span><span class="ldot">.</span></div>
+  <div class="prime-steps">
+    <div class="prime-step" id="ps0"><div class="dot"></div>Reading text…</div>
+    <div class="prime-step" id="ps1"><div class="dot"></div>Analyzing document…</div>
+    <div class="prime-step" id="ps2"><div class="dot"></div>Scoring word weights…</div>
+    <div class="prime-step" id="ps3"><div class="dot"></div>Preparing reader…</div>
+  </div>
+  <p class="prime-status" id="prime-status">Setting up…</p>
+</div>
+
+<!-- ════ READ ════ -->
+<div id="screen-read" class="screen">
+  <div class="prog-wrap" id="prog-wrap">
+    <div class="prog-bar" id="prog"></div>
+    <div class="prog-thumb" id="prog-thumb"></div>
+  </div>
+  <div class="reader-top">
+    <span class="reader-pos" id="rpos">0 / 0</span>
+    <div class="reader-top-right">
+      <button class="mini-btn" id="btn-save">Save</button>
+      <button class="mini-btn" id="btn-text-view">Text view</button>
+    </div>
+  </div>
+  <div class="word-wrap">
+    <span class="w-before" id="wb"></span>
+    <span class="w-pivot"  id="wp"></span>
+    <span class="w-after"  id="wa"></span>
+  </div>
+  <div class="reader-bottom">
+    <div class="reader-wpm-row">
+      <input type="range" id="reader-wpm" min="100" max="800" step="10" value="300">
+      <span class="reader-wpm-val" id="reader-wpm-val">300 wpm</span>
+    </div>
+    <div class="reader-controls">
+      <button class="btn-icon" id="btn-back" title="Prev sentence · double-click = beginning">◀</button>
+      <button class="btn-icon" id="btn-pp"   title="Play / Pause">⏸</button>
+      <button class="btn-icon" id="btn-fwd"  title="Next sentence">▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ TEXT VIEW ════ -->
+<div id="screen-text" class="screen">
+  <div class="text-nav">
+    <div class="text-nav-left">
+      <button class="mini-btn" id="btn-back-to-read">⚡ Speed</button>
+      <span class="text-nav-pos" id="text-pos">0 / 0</span>
+    </div>
+    <div class="text-nav-right">
+      <button class="mini-btn" id="btn-save-text">Save</button>
+      <button class="btn-icon" style="width:34px;height:34px;font-size:13px" id="btn-pp-text">⏸</button>
+    </div>
+  </div>
+  <div class="text-body" id="text-body"></div>
+</div>
+
+<!-- ════ DONE ════ -->
+<div id="screen-done" class="screen">
+  <div class="done-title">Done ✓</div>
+  <div class="done-stats" id="done-stats"></div>
+  <button class="btn-secondary" id="btn-again">Read again</button>
+  <button class="btn-primary" id="btn-new" style="margin-top:4px;max-width:220px">New text</button>
+</div>
+
+<!-- ════ SAVE TOAST ════ -->
+<div class="save-toast" id="save-toast">
+  <div class="save-toast-title">📌 Progress saved</div>
+  <div class="save-toast-ctx" id="save-ctx"></div>
+  <div class="save-toast-pos" id="save-pos-label"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+'use strict';
+
+// ── Constants ──────────────────────────────────────────────────────────
+var BASE_MS     = 196;
+var WEIGHTED_MS = 248;
+var INTRO_MS    = 316;
+
+// ── State ──────────────────────────────────────────────────────────────
+var words          = [];   // {t, c, b, p, a}
+var sentenceStarts = [];
+var textSpans      = [];
+var textViewBuilt  = false;
+var curHighlight   = null;
+var lastScrollIdx  = -1;
+var idx            = 0;
+var playing        = false;
+var timer          = null;
+var wpm            = 300;
+var startedAt      = 0;
+var apiKey         = '';
+var scrubbing      = false;
+var backClicks     = 0;
+var backClickTimer = null;
+
+// ── DOM ────────────────────────────────────────────────────────────────
+function $(id){ return document.getElementById(id); }
+
+function show(name){
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+  $('screen-'+name).classList.add('active');
+}
+
+// ── Tokenizer ──────────────────────────────────────────────────────────
+// Steps:
+//  1. Normalize em/en dashes, ellipsis, line endings
+//  2. Merge print-broken hyphens: "connec-" + "tion" → "connection"
+//  3. Split compound hyphens: "two-sided" → ["two", "-sided"]
+function tokenize(text){
+  // 1. Normalize punctuation
+  text = text
+    .replace(/\u2014/g, ' \u2014 ')   // em dash gets its own token with pauses
+    .replace(/\u2013/g, ' \u2013 ')   // en dash same
+    .replace(/\u2026/g, '...')         // ellipsis char → three dots
+    .replace(/\r\n|\r/g, '\n');
+
+  var raw = text.split(/\s+/).filter(function(w){ return w.length > 0; });
+
+  // 2. Merge print-broken hyphens
+  //    Rule: token ends with '-', next token starts with lowercase → merge
+  for (var i = raw.length - 2; i >= 0; i--){
+    var cur = raw[i], nxt = raw[i+1];
+    if (cur && nxt && cur.length > 1 &&
+        cur[cur.length-1] === '-' && /^[a-z]/.test(nxt)){
+      raw[i] = cur.slice(0, -1) + nxt; // drop the hyphen, join
+      raw.splice(i+1, 1);
+    }
+  }
+
+  // 3. Split compound hyphens: "two-sided" → ["two", "-sided"]
+  var out = [];
+  raw.forEach(function(w){
+    if (w.indexOf('-') > 0 && w.indexOf('-') < w.length - 1){
+      var parts = w.split('-');
+      parts.forEach(function(p, i){
+        var tok = i === 0 ? p : '-' + p;
+        if (tok.replace(/-/g,'').length > 0) out.push(tok);
+      });
+    } else {
+      out.push(w);
+    }
+  });
+  return out;
+}
+
+// ── Pixel-accurate ORP ─────────────────────────────────────────────────
+// Measures actual rendered character widths via Canvas, finds the character
+// whose visual center is closest to half the word's total pixel width.
+var _mc = document.createElement('canvas').getContext('2d');
+_mc.font = '500 100px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+function orp(word){
+  if (!word.length) return { b:'', p:word, a:'' };
+  var widths = [];
+  for (var i = 0; i < word.length; i++) widths.push(_mc.measureText(word[i]).width);
+  var total = widths.reduce(function(s,v){ return s+v; }, 0);
+  var half = total / 2, cum = 0, best = 0, bestD = Infinity;
+  for (var j = 0; j < word.length; j++){
+    var d = Math.abs(cum + widths[j]/2 - half);
+    if (d < bestD){ bestD = d; best = j; }
+    cum += widths[j];
+  }
+  return { b: word.slice(0,best), p: word[best], a: word.slice(best+1) };
+}
+
+// ── Timing ─────────────────────────────────────────────────────────────
+function msFor(word, i, color){
+  var scale = 350 / wpm;
+  if (i === 0) return INTRO_MS * scale;
+  // Sentence-ending punctuation (including smart quotes/apostrophes after)
+  if (/[.!?][\u2019\u201d'"]?$/.test(word)) return WEIGHTED_MS * 1.5 * scale;
+  // Em/en dashes and ellipsis get a brief pause
+  if (word === '\u2014' || word === '\u2013' || word === '...' || word === ',') return WEIGHTED_MS * 1.15 * scale;
+  if (color) return WEIGHTED_MS * scale;
+  return BASE_MS * scale;
+}
+
+// ── Rule-based lexical weighting ───────────────────────────────────────
+var STOP = new Set([
+  'the','a','an','and','or','but','in','on','at','to','for','of','with','by',
+  'from','up','about','into','through','during','before','after','above','below',
+  'between','out','off','over','under','again','then','once','here','there',
+  'when','where','why','how','all','both','each','few','more','most','other',
+  'some','such','than','too','very','just','because','as','until','while',
+  'although','this','that','these','those','is','are','was','were','be','been',
+  'being','have','has','had','do','does','did','will','would','could','should',
+  'may','might','shall','can','not','no','nor','so','yet','still','its','it',
+  'he','she','they','we','you','i','me','him','her','us','them','my','your',
+  'his','our','their','what','which','who','whom','whose','said','says','also',
+  'even','only','like','well','much','many','made','make','take','come','go',
+  'get','see','know','think','look','want','give','use','find','tell','ask',
+  'seem','feel','try','leave','call','keep','let','put','mean','become','show',
+  'hear','play','run','move','live','hold','bring','write','sit','stand',
+  'lose','pay','meet','continue','set','learn','change','lead','watch','follow',
+  'stop','read','spend','grow','open','walk','stay','fall','cut','reach',
+  'remain','raise','pass','sell','decide','pull','upon','now','new','old',
+  'own','same','long','little','right','big','great','high','small','large',
+  'next','early','young','public','private','real','best','free','able','back',
+  'already','away','every','never','always','often','since','rather','quite',
+  'among','within','without','against','along','around','toward','towards',
+  'across','behind','beside','near','past','per','plus','via','etc'
+]);
+
+function basicWeight(word, afterEnd){
+  var clean = word.toLowerCase().replace(/[^a-z]/g,'');
+  if (clean.length <= 2) return null;
+  if (STOP.has(clean)) return null;
+  // ALL-CAPS acronym
+  if (/^[A-Z]{3,}$/.test(word.replace(/[^A-Za-z]/g,''))) return 'orange';
+  // Capitalized mid-sentence = proper noun / technical term
+  if (!afterEnd && /^[A-Z]/.test(word) && clean.length >= 3) return 'orange';
+  // Numbers / statistics
+  if (/\d/.test(word)) return 'green';
+  // Long rare words → orange; medium uncommon → green
+  if (clean.length >= 10) return 'orange';
+  if (clean.length >= 6)  return 'green';
+  return null;
+}
+
+function applyBasicWeights(wordObjs){
+  var prevEnded = true;
+  wordObjs.forEach(function(w){
+    if (w.c === null) w.c = basicWeight(w.t, prevEnded);
+    prevEnded = /[.!?][\u2019\u201d'"]?$/.test(w.t);
+  });
+}
+
+// ── Sentence boundaries ────────────────────────────────────────────────
+function computeSentenceStarts(wordObjs){
+  var starts = [0];
+  for (var i = 0; i < wordObjs.length - 1; i++){
+    if (/[.!?][\u2019\u201d'"]?$/.test(wordObjs[i].t)){
+      // Skip punctuation-only tokens
+      var next = i + 1;
+      while (next < wordObjs.length && wordObjs[next].t.replace(/[^a-zA-Z0-9]/g,'').length === 0) next++;
+      if (next < wordObjs.length) starts.push(next);
+    }
+  }
+  return starts;
+}
+
+// ── EPUB parser ────────────────────────────────────────────────────────
+async function parseEpub(file){
+  var zip = await JSZip.loadAsync(file);
+  var containerXml = await zip.file('META-INF/container.xml').async('text');
+  var opfMatch = containerXml.match(/full-path="([^"]+\.opf)"/);
+  if (!opfMatch) throw new Error('No OPF found in epub');
+  var opfPath = opfMatch[1];
+  var opfDir  = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/')+1) : '';
+  var opfText = await zip.file(opfPath).async('text');
+  var parser  = new DOMParser();
+  var opfDoc  = parser.parseFromString(opfText, 'application/xml');
+  var manifest = {};
+  opfDoc.querySelectorAll('manifest item').forEach(function(item){
+    manifest[item.getAttribute('id')] = item.getAttribute('href');
+  });
+  var spine = Array.from(opfDoc.querySelectorAll('spine itemref'))
+    .map(function(ref){ return manifest[ref.getAttribute('idref')]; }).filter(Boolean);
+  var allText = '';
+  for (var si = 0; si < spine.length; si++){
+    var href = spine[si], fPath = opfDir + href;
+    var fileObj = zip.file(fPath) || zip.file(decodeURIComponent(fPath));
+    if (!fileObj) continue;
+    var html = await fileObj.async('text');
+    var doc  = parser.parseFromString(html, 'text/html');
+    doc.querySelectorAll('nav, script, style, head').forEach(function(el){ el.remove(); });
+    allText += (doc.body ? (doc.body.innerText || doc.body.textContent || '') : '') + '\n';
+  }
+  return allText.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ── Anthropic API (client-side) ────────────────────────────────────────
+async function callClaude(messages, maxTokens, model){
+  if (!apiKey) return null;
+  try {
+    var res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01',
+        'content-type': 'application/json', 'anthropic-dangerous-allow-browser': 'true' },
+      body: JSON.stringify({ model:model, max_tokens:maxTokens, messages:messages })
+    });
+    if (!res.ok) return null;
+    var data = await res.json();
+    return (data.content && data.content[0] && data.content[0].text) || null;
+  } catch(e){ return null; }
+}
+
+async function fetchWordColors(wordList, docContext){
+  var CHUNK = 800, colors = new Array(wordList.length).fill(null);
+  var ctxNote = docContext ? 'DOCUMENT CONTEXT:\n"""'+docContext+'"""\n\n' : '';
+  for (var i = 0; i < wordList.length; i += CHUNK){
+    var chunk = wordList.slice(i, i+CHUNK), wc = chunk.length;
+    var prompt = 'Return ONLY valid JSON.\n'+ctxNote+
+      'Score each word: "green" (important qualifier/action), "orange" (core concept), or null.\n'+
+      'LIMIT: 2–4 orange + 4–6 green per 100 words.\n'+
+      '{"wordColors":[EXACTLY '+wc+' values]}\n\nWords: '+chunk.join(' ');
+    var raw = await callClaude([{role:'user',content:prompt}], 3000, 'claude-haiku-4-5-20251001');
+    if (raw){
+      try {
+        var parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+        var arr = parsed.wordColors || [];
+        for (var j = 0; j < Math.min(arr.length, wc); j++) colors[i+j] = arr[j] || null;
+      } catch(e){}
+    }
+  }
+  return colors;
+}
+
+// ── Priming ────────────────────────────────────────────────────────────
+function setPrimeStep(n, msg){
+  for (var i = 0; i < 4; i++)
+    $('ps'+i).className = 'prime-step '+(i < n ? 'done' : i === n ? 'active' : '');
+  if (msg) $('prime-status').textContent = msg;
+}
+
+async function primeAndStart(rawText){
+  // Reset text view state
+  textViewBuilt = false; textSpans = []; curHighlight = null; lastScrollIdx = -1;
+  $('text-body').innerHTML = '';
+
+  words = tokenize(rawText).map(function(t){
+    var o = orp(t);
+    return { t:t, c:null, b:o.b, p:o.p, a:o.a };
+  });
+
+  show('prime');
+  setPrimeStep(0, 'Tokenized '+words.length.toLocaleString()+' words…');
+  setPrimeStep(1, 'Applying lexical weights…');
+  applyBasicWeights(words);
+  sentenceStarts = computeSentenceStarts(words);
+
+  if (apiKey){
+    var S=4000, mid=Math.floor(rawText.length/2);
+    var sample = rawText.length > 12000
+      ? rawText.slice(0,S)+'\n[...middle...]\n'+rawText.slice(Math.max(0,mid-S/2),mid+S/2)+'\n[...end...]\n'+rawText.slice(-S)
+      : rawText;
+    setPrimeStep(1, 'Analyzing document…');
+    var schemaRaw = await callClaude([{role:'user',content:
+      'Return ONLY valid JSON. Analyze this text.\n{"summary":"2-3 sentences","keywords":["5-8 terms"],"themes":["2-4 themes"]}\n\nText:\n"""'+sample.slice(0,12000)+'"""'
+    }], 600, 'claude-haiku-4-5-20251001');
+    var docContext = '';
+    if (schemaRaw){
+      try {
+        var s = JSON.parse(schemaRaw.replace(/```json|```/g,'').trim());
+        docContext = [s.summary||'',
+          s.keywords&&s.keywords.length?'Key terms: '+s.keywords.join(', '):'',
+          s.themes&&s.themes.length?'Themes: '+s.themes.join(', '):''].filter(Boolean).join(' | ');
+      } catch(e){}
+    }
+    setPrimeStep(2, 'Upgrading with semantic weights…');
+    var colorArr = await fetchWordColors(words.map(function(w){ return w.t; }), docContext);
+    colorArr.forEach(function(c,i){ if (words[i]) words[i].c = c !== undefined ? c : words[i].c; });
+  }
+
+  setPrimeStep(3, 'Ready!');
+  await new Promise(function(r){ setTimeout(r,350); });
+  startReader();
+}
+
+// ── Display helpers ────────────────────────────────────────────────────
+function displayWord(i){
+  if (i < 0 || i >= words.length) return;
+  var w = words[i], cc = w.c ? 'c-'+w.c : '';
+  $('wb').textContent = w.b;  $('wb').className = 'w-before '+cc;
+  $('wp').textContent = w.p;  $('wp').className = 'w-pivot';
+  $('wa').textContent = w.a;  $('wa').className = 'w-after '+cc;
+}
+
+function updateProgress(){
+  if (!words.length) return;
+  var pct = (idx / words.length * 100).toFixed(2);
+  $('prog').style.width = pct+'%';
+  $('prog-thumb').style.left = pct+'%';
+  var label = (idx+1)+' / '+words.length;
+  $('rpos').textContent = label;
+  $('text-pos').textContent = label;
+}
+
+// ── Seek ───────────────────────────────────────────────────────────────
+function seekTo(newIdx){
+  clearTimeout(timer);
+  idx = Math.max(0, Math.min(newIdx, words.length - 1));
+  displayWord(idx);
+  updateProgress();
+  highlightTextSpan(idx);
+  if (playing) tick();
+}
+
+// ── Sentence navigation ────────────────────────────────────────────────
+function prevSentence(){
+  if (!sentenceStarts.length){ seekTo(0); return; }
+  var curStart = 0;
+  for (var i = sentenceStarts.length-1; i >= 0; i--){
+    if (sentenceStarts[i] <= idx){ curStart = sentenceStarts[i]; break; }
+  }
+  // If within 2 words of sentence start, go to the one before
+  if (idx - curStart <= 2 && curStart > 0){
+    for (var i = sentenceStarts.length-1; i >= 0; i--){
+      if (sentenceStarts[i] < curStart){ seekTo(sentenceStarts[i]); return; }
+    }
+    seekTo(0);
+  } else {
+    seekTo(curStart);
+  }
+}
+
+function nextSentence(){
+  for (var i = 0; i < sentenceStarts.length; i++){
+    if (sentenceStarts[i] > idx){ seekTo(sentenceStarts[i]); return; }
+  }
+  // Already in last sentence
+  seekTo(words.length > 0 ? words.length-1 : 0);
+}
+
+// ── Reader engine ──────────────────────────────────────────────────────
+function startReader(){
+  idx = 0; playing = true; startedAt = Date.now();
+  $('reader-wpm').value = wpm;
+  $('reader-wpm-val').textContent = wpm+' wpm';
+  syncPlayIcons();
+  show('read');
+  tick();
+}
+
+function tick(){
+  if (!playing || idx >= words.length){ if (idx >= words.length) finish(); return; }
+  displayWord(idx);
+  updateProgress();
+  highlightTextSpan(idx);
+  var delay = msFor(words[idx].t, idx, words[idx].c);
+  idx++;
+  timer = setTimeout(tick, delay);
+}
+
+function syncPlayIcons(){
+  var icon = playing ? '⏸' : '▶';
+  $('btn-pp').textContent = icon;
+  $('btn-pp-text').textContent = icon;
+}
+
+function togglePlay(){
+  playing = !playing;
+  syncPlayIcons();
+  if (playing) tick(); else clearTimeout(timer);
+}
+
+function finish(){
+  playing = false; clearTimeout(timer);
+  var elapsed = (Date.now()-startedAt)/60000;
+  var actualWpm = elapsed > 0.08 ? Math.round(words.length/elapsed) : wpm;
+  var wpmStr = elapsed > 0.08 ? '~'+actualWpm+' wpm' : wpm+' wpm (target)';
+  $('done-stats').innerHTML = words.length.toLocaleString()+' words<br>'+
+    Math.round(elapsed)+' min '+Math.round((elapsed%1)*60)+' sec<br>Average speed: '+wpmStr;
+  show('done');
+}
+
+// ── Save progress ──────────────────────────────────────────────────────
+function saveProgress(){
+  if (!words.length) return;
+  localStorage.setItem('mnemo_progress', JSON.stringify({idx:idx, ts:Date.now()}));
+
+  // Build context: current sentence + next ~2 sentences
+  var ctxStart = 0;
+  for (var i = sentenceStarts.length-1; i >= 0; i--){
+    if (sentenceStarts[i] <= idx){ ctxStart = sentenceStarts[i]; break; }
+  }
+  var ctxEnd = Math.min(words.length, idx+50);
+  var sentCount = 0;
+  for (var j = idx; j < words.length; j++){
+    if (/[.!?][\u2019\u201d'"]?$/.test(words[j].t)){
+      sentCount++;
+      if (sentCount >= 2){ ctxEnd = j+1; break; }
+    }
+  }
+  var ctx = words.slice(ctxStart, ctxEnd).map(function(w){ return w.t; }).join(' ');
+  $('save-ctx').textContent = ctx;
+  $('save-pos-label').textContent = 'Word '+(idx+1)+' of '+words.length;
+  var toast = $('save-toast');
+  toast.classList.add('visible');
+  setTimeout(function(){ toast.classList.remove('visible'); }, 5000);
+}
+
+// ── Text view ──────────────────────────────────────────────────────────
+function buildTextView(){
+  if (textViewBuilt) return;
+  var container = $('text-body');
+  var frag = document.createDocumentFragment();
+  textSpans = [];
+  for (var i = 0; i < words.length; i++){
+    var w = words[i];
+    var span = document.createElement('span');
+    span.className = 'tw'+(w.c ? ' tc-'+w.c : '');
+    span.dataset.i = i;
+    span.textContent = w.t+' ';
+    frag.appendChild(span);
+    textSpans.push(span);
+  }
+  container.appendChild(frag);
+  textViewBuilt = true;
+  container.addEventListener('click', function(e){
+    var t = e.target;
+    if (t.classList.contains('tw') && t.dataset.i !== undefined) seekTo(+t.dataset.i);
+  });
+}
+
+function highlightTextSpan(i){
+  if (!textViewBuilt || !textSpans[i]) return;
+  if (curHighlight) curHighlight.classList.remove('current');
+  textSpans[i].classList.add('current');
+  curHighlight = textSpans[i];
+  if ($('screen-text').classList.contains('active') && Math.abs(i-lastScrollIdx) > 15){
+    textSpans[i].scrollIntoView({ behavior:'smooth', block:'center' });
+    lastScrollIdx = i;
+  }
+}
+
+function openTextView(){
+  if (!words.length) return;
+  buildTextView();
+  highlightTextSpan(idx);
+  if (textSpans[idx]){ textSpans[idx].scrollIntoView({ block:'center' }); lastScrollIdx = idx; }
+  show('text');
+}
+
+// ── Progress bar scrubbing ─────────────────────────────────────────────
+function seekFromX(clientX){
+  var rect = $('prog-wrap').getBoundingClientRect();
+  var pct  = Math.max(0, Math.min(1, (clientX-rect.left)/rect.width));
+  seekTo(Math.floor(pct * words.length));
+}
+
+// ── File handling ──────────────────────────────────────────────────────
+function getFullText(){ var pa=$('paste-area'); return pa.dataset.full||pa.value; }
+function checkReady(){ $('start-btn').disabled = getFullText().trim().length < 10; }
+
+async function loadFile(file){
+  try {
+    var text = file.name.toLowerCase().endsWith('.epub') ? await parseEpub(file) : await file.text();
+    text = text.trim();
+    if (text.length < 10){ alert('File appears empty.'); return; }
+    var pa = $('paste-area');
+    pa.dataset.full = text;
+    pa.value = text.slice(0,120)+(text.length>120?' …':'');
+    checkReady();
+  } catch(e){ alert('Could not read file: '+e.message); }
+}
+
+// ── Event wiring ───────────────────────────────────────────────────────
+
+// Upload screen
+$('drop-zone').addEventListener('click', function(){ $('file-input').click(); });
+$('file-input').addEventListener('change', function(e){ if(e.target.files[0]) loadFile(e.target.files[0]); });
+$('drop-zone').addEventListener('dragover', function(e){ e.preventDefault(); $('drop-zone').classList.add('over'); });
+$('drop-zone').addEventListener('dragleave', function(){ $('drop-zone').classList.remove('over'); });
+$('drop-zone').addEventListener('drop', function(e){
+  e.preventDefault(); $('drop-zone').classList.remove('over');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+$('paste-area').addEventListener('input', function(){ delete $('paste-area').dataset.full; checkReady(); });
+$('wpm-slider').addEventListener('input', function(e){ wpm=+e.target.value; $('wpm-display').textContent=wpm+' wpm'; });
+$('api-key-input').addEventListener('input', function(e){
+  apiKey = e.target.value.trim();
+  if (apiKey) localStorage.setItem('mnemo_k',apiKey); else localStorage.removeItem('mnemo_k');
+});
+$('start-btn').addEventListener('click', function(){
+  var text=getFullText().trim(); if(text.length<10) return; primeAndStart(text);
+});
+
+// Progress bar — mouse scrub
+var pw = $('prog-wrap');
+pw.addEventListener('mousedown', function(e){ scrubbing=true; seekFromX(e.clientX); });
+document.addEventListener('mousemove', function(e){ if(scrubbing) seekFromX(e.clientX); });
+document.addEventListener('mouseup', function(){ scrubbing=false; });
+// Progress bar — touch scrub
+pw.addEventListener('touchstart', function(e){ e.preventDefault(); seekFromX(e.touches[0].clientX); },{passive:false});
+pw.addEventListener('touchmove',  function(e){ e.preventDefault(); seekFromX(e.touches[0].clientX); },{passive:false});
+
+// Play/pause
+$('btn-pp').addEventListener('click', togglePlay);
+$('btn-pp-text').addEventListener('click', togglePlay);
+
+// Back button: single = prev sentence, double-click/tap = go to beginning
+$('btn-back').addEventListener('click', function(){
+  backClicks++;
+  if (backClicks === 1){
+    backClickTimer = setTimeout(function(){ backClicks=0; prevSentence(); }, 300);
+  } else {
+    clearTimeout(backClickTimer); backClicks=0; seekTo(0);
+  }
+});
+$('btn-fwd').addEventListener('click', nextSentence);
+
+// Save
+$('btn-save').addEventListener('click', saveProgress);
+$('btn-save-text').addEventListener('click', saveProgress);
+
+// Text view toggle
+$('btn-text-view').addEventListener('click', openTextView);
+$('btn-back-to-read').addEventListener('click', function(){ show('read'); });
+
+// WPM slider (reader)
+$('reader-wpm').addEventListener('input', function(e){
+  wpm=+e.target.value; $('reader-wpm-val').textContent=wpm+' wpm';
+});
+
+// Done screen
+$('btn-again').addEventListener('click', startReader);
+$('btn-new').addEventListener('click', function(){
+  var pa=$('paste-area'); pa.value=''; delete pa.dataset.full; checkReady(); show('upload');
+});
+
+// Keyboard shortcuts (space=play/pause, arrows=sentence nav)
+document.addEventListener('keydown', function(e){
+  var active = document.querySelector('.screen.active');
+  if (!active) return;
+  var id = active.id;
+  if (e.code==='Space' && (id==='screen-read'||id==='screen-text')){ e.preventDefault(); togglePlay(); }
+  if (id==='screen-read'){
+    if (e.code==='ArrowLeft'){ e.preventDefault(); prevSentence(); }
+    if (e.code==='ArrowRight'){ e.preventDefault(); nextSentence(); }
+  }
+});
+
+// Restore saved API key
+(function(){
+  var k = localStorage.getItem('mnemo_k');
+  if (k){ $('api-key-input').value=k; apiKey=k; }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mnemo — AI Speed Reading</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b1623;
+      --card: #111f2e;
+      --card2: #0d1e2e;
+      --border: #1e3347;
+      --border2: #1e2f42;
+      --teal: #00c896;
+      --teal2: #00a87a;
+      --teal-dim: rgba(0, 200, 150, 0.15);
+      --orange: #f5a623;
+      --orange-dim: rgba(245, 166, 35, 0.18);
+      --red: #e05555;
+      --white: #fff;
+      --gray1: #e8edf2;
+      --gray2: #a8b5c2;
+      --gray3: #3a5068;
+      --gray4: #1e3347;
+      --mono: 'Courier New', monospace;
+      --ui: 'Inter', 'DM Sans', sans-serif;
+      --display: 'Outfit', 'Inter', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--white); font-family: var(--ui); min-height: 100vh; overflow-x: hidden; }
+
+    /* HEADER */
+    .hdr { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--bg); flex-shrink: 0; }
+    .logo { font-family: var(--display); font-size: 20px; font-weight: 800; letter-spacing: -.04em; display: flex; align-items: center; gap: 0; }
+    .logo .lm { color: var(--teal); }
+    .logo .lr { color: var(--white); }
+    .badge { font-family: var(--display); font-size: 9px; border: 1.5px solid var(--teal); color: var(--teal); padding: 2px 6px; border-radius: 3px; letter-spacing: .08em; }
+    .hdr-r { font-size: 11px; color: var(--gray3); font-family: var(--display); max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* INTAKE */
+    .intake { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 36px 24px 60px; max-width: 720px; margin: 0 auto; width: 100%; }
+    .hero { text-align: center; margin-bottom: 32px; }
+    .hero-title { font-family: var(--display); font-size: clamp(32px, 7vw, 56px); font-weight: 800; letter-spacing: -.05em; margin-bottom: 4px; }
+    .hero-title .hm { color: var(--teal); }
+    .hero-title .hr { color: var(--white); }
+    .hero-tag { font-size: 13px; color: var(--gray2); font-family: var(--display); letter-spacing: .04em; }
+    .hero-stats { display: flex; gap: 20px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+    .hs { text-align: center; }
+    .hs-n { font-family: var(--display); font-size: 20px; font-weight: 700; color: var(--teal); }
+    .hs-l { font-size: 10px; color: var(--gray3); margin-top: 1px; }
+
+    textarea { width: 100%; min-height: 140px; background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; color: var(--white); font-family: var(--ui); font-size: 15px; line-height: 1.7; padding: 16px; resize: vertical; outline: none; transition: border-color .2s; }
+    textarea:focus { border-color: var(--teal); }
+    textarea::placeholder { color: var(--gray3); }
+
+    .divider { width: 100%; display: flex; align-items: center; gap: 12px; margin: 16px 0; }
+    .divider-line { flex: 1; height: 1px; background: var(--border); }
+    .divider-lbl { font-family: var(--display); font-size: 9px; color: var(--gray3); letter-spacing: .12em; }
+
+    .upload { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--card); border: 1.5px dashed var(--border); border-radius: 10px; padding: 14px 20px; cursor: pointer; transition: border-color .2s, background .15s; margin-bottom: 6px; }
+    .upload:hover { border-color: var(--teal); background: var(--card2); }
+    .upload-txt { font-family: var(--display); font-size: 10px; color: var(--gray2); letter-spacing: .04em; }
+    .ch-status { font-family: var(--display); font-size: 10px; color: var(--gray3); margin-bottom: 10px; min-height: 16px; }
+
+    .est-row { width: 100%; display: flex; gap: 14px; justify-content: center; margin-bottom: 16px; opacity: 0; transition: opacity .3s; }
+    .est-row.vis { opacity: 1; }
+    .est-pill { font-family: var(--display); font-size: 10px; color: var(--gray2); background: var(--card); border: 1px solid var(--border); padding: 5px 12px; border-radius: 16px; display: flex; align-items: center; gap: 4px; }
+    .est-pill .en { color: var(--teal); font-weight: 700; }
+
+    .focus-row { width: 100%; margin-bottom: 20px; }
+    .focus-lbl { font-family: var(--display); font-size: 9px; color: var(--gray3); letter-spacing: .12em; margin-bottom: 5px; }
+    .focus-in { width: 100%; background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; color: var(--white); font-family: var(--ui); font-size: 13px; padding: 11px 14px; outline: none; transition: border-color .2s; }
+    .focus-in:focus { border-color: var(--teal); }
+    .focus-in::placeholder { color: var(--gray3); }
+
+    .go-btn { width: 100%; background: var(--teal); color: var(--bg); border: none; border-radius: 10px; font-family: var(--display); font-size: 13px; font-weight: 700; letter-spacing: .06em; padding: 15px; cursor: pointer; transition: opacity .2s, transform .1s; }
+    .go-btn:hover { opacity: .9; transform: translateY(-1px); }
+    .go-btn:active { transform: translateY(0); }
+    .go-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    /* BOOKMARKS */
+    .bm-sec { width: 100%; margin-bottom: 16px; }
+    .bm-hdr { font-family: var(--display); font-size: 9px; color: var(--gray3); letter-spacing: .12em; margin-bottom: 6px; }
+    .bm-list { display: flex; flex-direction: column; gap: 5px; }
+    .bm-item { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: border-color .2s; }
+    .bm-item:hover { border-color: var(--teal); }
+    .bm-l { flex: 1; min-width: 0; }
+    .bm-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px; }
+    .bm-meta { font-family: var(--display); font-size: 9px; color: var(--gray3); }
+    .bm-bar { width: 50px; height: 3px; background: var(--border); border-radius: 2px; flex-shrink: 0; }
+    .bm-bar-f { height: 3px; background: var(--teal); border-radius: 2px; }
+    .bm-res { font-family: var(--display); font-size: 9px; border: 1px solid var(--teal); color: var(--teal); background: transparent; padding: 3px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0; }
+    .bm-res:hover { background: var(--teal-dim); }
+    .bm-del { font-size: 13px; color: var(--gray3); background: none; border: none; cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
+    .bm-del:hover { color: var(--red); }
+
+    /* PRIMING */
+    .prime-screen { align-items: center; justify-content: center; text-align: center; padding: 40px 24px; min-height: 100vh; display: flex; flex-direction: column; }
+    .p-icon { width: 48px; height: 48px; border: 2px solid var(--teal); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(0,200,150,.3); } 50% { box-shadow: 0 0 0 12px rgba(0,200,150,0); } }
+    .p-title { font-family: var(--display); font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .p-title .pm { color: var(--teal); }
+    .p-title .pr { color: var(--white); }
+    .p-status { font-size: 12px; color: var(--gray2); margin-bottom: 24px; min-height: 18px; }
+    .p-steps { display: flex; flex-direction: column; gap: 9px; max-width: 380px; margin: 0 auto 24px; text-align: left; }
+    .p-step { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--gray3); transition: color .3s; }
+    .p-step.done { color: var(--teal); }
+    .p-step.active { color: var(--white); }
+    .s-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background .3s; }
+    .p-step.done .s-dot { background: var(--teal); }
+    .p-step.active .s-dot { background: var(--white); animation: blink .8s ease-in-out infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+    .schema { background: var(--card); border: 1.5px solid var(--teal); border-radius: 10px; padding: 16px 20px; max-width: 520px; margin: 0 auto 20px; text-align: left; }
+    .schema-lbl { font-family: var(--display); font-size: 9px; color: var(--teal); letter-spacing: .12em; margin-bottom: 7px; }
+    .schema-txt { font-size: 13px; color: var(--gray1); line-height: 1.65; }
+    .schema-kws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .kw { font-family: var(--display); font-size: 9px; background: var(--teal-dim); border: 1px solid var(--teal2); color: var(--teal); padding: 2px 7px; border-radius: 3px; }
+    .start-btn { background: var(--teal); color: var(--bg); border: none; border-radius: 10px; font-family: var(--display); font-size: 12px; font-weight: 700; letter-spacing: .06em; padding: 13px 32px; cursor: pointer; transition: opacity .2s; }
+    .start-btn:hover { opacity: .88; }
+
+    /* READER */
+    .reader-screen { flex-direction: column; min-height: 100vh; display: flex; }
+    .prog-wrap { display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid var(--border); background: var(--bg); flex-shrink: 0; }
+    .wpm-b { font-family: var(--display); font-size: 11px; color: var(--teal); letter-spacing: .08em; white-space: nowrap; }
+    .prog-tr { flex: 1; height: 3px; background: var(--border); border-radius: 2px; position: relative; }
+    .prog-f { height: 3px; background: var(--teal); border-radius: 2px; transition: width .15s linear; position: relative; }
+    .prog-f::after { content: ''; position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; background: var(--teal); border-radius: 50%; box-shadow: 0 0 8px rgba(0,200,150,.5); }
+    .prog-p { font-family: var(--display); font-size: 11px; color: var(--gray2); min-width: 32px; text-align: right; }
+
+    .reader-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; position: relative; }
+    /* ORP Display */
+    .orp-wrap { display: flex; flex-direction: column; align-items: center; margin-bottom: 32px; }
+    .orp-tick { width: 2px; height: 10px; background: var(--teal); border-radius: 1px; }
+    .orp-tick-t { margin-bottom: 4px; }
+    .orp-tick-b { margin-top: 4px; }
+    .orp-word { font-family: var(--display); font-size: clamp(38px, 7vw, 62px); font-weight: 700; letter-spacing: -.02em; line-height: 1; display: flex; }
+    /* ob/oa = word characters before/after pivot; op = pivot letter */
+    .orp-word .ob, .orp-word .oa { color: var(--white); }
+    .orp-word .op { color: var(--teal); }
+    .orp-word.c-green  .ob, .orp-word.c-green  .oa { color: var(--teal); }
+    .orp-word.c-green  .op { color: var(--teal); }
+    .orp-word.c-orange .ob, .orp-word.c-orange .oa { color: var(--orange); }
+    .orp-word.c-orange .op { color: var(--orange); }
+    .orp-word.c-mnemo  .ob, .orp-word.c-mnemo  .oa { color: var(--teal); }
+    .orp-word.c-mnemo  .op { color: var(--teal); font-weight: 800; }
+
+    /* Weight bar chart */
+    .wbar-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px 6px; max-width: 640px; width: 100%; position: relative; overflow: hidden; margin-bottom: 8px; height: 60px; }
+    .wbar-label { font-family: var(--display); font-size: 7px; color: var(--gray3); letter-spacing: .12em; position: absolute; top: 4px; left: 10px; }
+    .wbar-inner { display: flex; align-items: flex-end; gap: 1px; height: 44px; margin-top: 10px; position: relative; }
+    .wb { flex-shrink: 0; border-radius: 1px 1px 0 0; min-width: 2px; }
+    .wbar-cursor { position: absolute; top: 0; width: 2px; height: 100%; background: var(--teal); opacity: .6; transition: left .1s linear; box-shadow: 0 0 6px rgba(0,200,150,.4); }
+
+    .ch-lbl { font-family: var(--display); font-size: 9px; color: var(--gray3); letter-spacing: .05em; margin-bottom: 8px; cursor: pointer; padding: 3px 10px; border: 1px solid transparent; border-radius: 4px; transition: all .15s; }
+    .ch-lbl:hover { border-color: var(--border); color: var(--teal); }
+
+    .reader-ctrls { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; padding: 16px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .cb { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: .05em; background: var(--card); border: 1.5px solid var(--border); color: var(--gray1); padding: 9px 16px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: border-color .15s, background .15s; white-space: nowrap; }
+    .cb:hover { border-color: var(--gray2); background: var(--card2); }
+    .cb.pri { background: var(--teal); border-color: var(--teal); color: var(--bg); }
+    .cb.pri:hover { opacity: .88; }
+    .cb.sav { border-color: var(--teal); color: var(--teal); }
+    .cb.sav:hover { background: var(--teal-dim); }
+    .cb.toc-btn { border-color: var(--orange); color: var(--orange); }
+    .cb.toc-btn:hover { background: var(--orange-dim); }
+    .wpm-wrap { display: flex; align-items: center; gap: 6px; background: var(--card); border: 1.5px solid var(--border); padding: 7px 12px; border-radius: 6px; min-width: 120px; }
+    .wpm-wrap input[type=range] { flex: 1; }
+    .wpm-v { font-family: var(--display); font-size: 10px; color: var(--teal); letter-spacing: .04em; white-space: nowrap; }
+    input[type=range] { -webkit-appearance: none; flex: 1; height: 3px; background: var(--border); border-radius: 2px; outline: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--teal); cursor: pointer; }
+
+    /* SUMMARY */
+    .sum-in { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 36px 24px; max-width: 640px; margin: 0 auto; width: 100%; }
+    .sum-done { font-family: var(--display); font-size: 9px; color: var(--teal); letter-spacing: .14em; margin-bottom: 8px; }
+    .sum-hl { font-family: var(--display); font-size: 20px; font-weight: 700; margin-bottom: 24px; text-align: center; }
+    .sum-hl .sh-w { color: var(--white); }
+    .sum-hl .sh-t { color: var(--teal); }
+    .sum-stats { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center; }
+    .sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px 16px; text-align: center; min-width: 90px; }
+    .sc-n { font-family: var(--display); font-size: 20px; font-weight: 700; color: var(--teal); margin-bottom: 1px; }
+    .sc-l { font-size: 10px; color: var(--gray2); }
+    .ret-sec { width: 100%; margin-bottom: 20px; }
+    .ret-lbl { font-family: var(--display); font-size: 9px; color: var(--teal); letter-spacing: .12em; margin-bottom: 8px; }
+    .ret-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 16px; position: relative; }
+    .ret-curve { width: 100%; height: 100px; }
+    .ret-now { position: absolute; right: 12px; top: 10px; font-family: var(--display); font-size: 18px; font-weight: 700; color: var(--teal); }
+    .ret-now-l { font-size: 9px; color: var(--gray3); text-align: right; }
+    .ret-note { font-size: 10px; color: var(--gray3); margin-top: 8px; line-height: 1.5; }
+    .sum-sec { width: 100%; margin-bottom: 20px; }
+    .ss-t { font-family: var(--display); font-size: 9px; color: var(--teal); letter-spacing: .12em; margin-bottom: 8px; }
+    .sum-txt { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 12px; color: var(--gray1); line-height: 1.7; }
+
+    /* FLASHCARDS */
+    .fc-list { display: flex; flex-direction: column; gap: 12px; }
+    .fc-card {
+      perspective: 1000px;
+      height: 120px;
+      cursor: pointer;
+      border-radius: 12px;
+    }
+    .fc-card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+      border-radius: 12px;
+    }
+    .fc-card.flipped .fc-card-inner { transform: rotateY(180deg); }
+    .fc-front, .fc-back {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 18px 20px;
+      border: 1.5px solid var(--border);
+    }
+    .fc-front {
+      background: var(--card);
+    }
+    .fc-back {
+      background: linear-gradient(135deg, rgba(0,200,150,0.08) 0%, var(--card) 100%);
+      border-color: var(--teal2);
+      transform: rotateY(180deg);
+    }
+    .fc-label {
+      font-family: var(--display);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+    .fc-front .fc-label { color: var(--teal); }
+    .fc-back .fc-label { color: var(--teal2); }
+    .fc-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--gray1);
+    }
+    .fc-back .fc-text { color: var(--white); font-size: 13px; }
+    .fc-hint {
+      font-size: 9px;
+      color: var(--gray3);
+      margin-top: 8px;
+      font-family: var(--display);
+      letter-spacing: 0.08em;
+    }
+    .fc-progress {
+      display: flex;
+      gap: 4px;
+      margin-top: 12px;
+      justify-content: center;
+    }
+    .fc-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.2s;
+    }
+    .fc-dot.seen { background: var(--teal); }
+    .sum-acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+    .s-btn { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: opacity .2s; }
+    .s-btn.pri { background: var(--teal); border: none; color: var(--bg); }
+    .s-btn.sec { background: transparent; border: 1.5px solid var(--border); color: var(--gray1); }
+    .s-btn:hover { opacity: .85; }
+
+    /* MODAL */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(11,22,35,.88); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+    .modal.vis { display: flex; }
+    .m-card { background: var(--card); border: 1.5px solid var(--teal); border-radius: 12px; padding: 24px 28px; max-width: 480px; width: 100%; }
+    .m-lbl { font-family: var(--display); font-size: 9px; color: var(--teal); letter-spacing: .14em; margin-bottom: 8px; }
+    .m-ttl { font-family: var(--display); font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+    .m-body { font-size: 12px; color: var(--gray1); line-height: 1.7; margin-bottom: 16px; }
+    .m-btns { display: flex; gap: 6px; }
+    .mb { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 9px 18px; border-radius: 6px; cursor: pointer; }
+    .mb.pri { background: var(--teal); border: none; color: var(--bg); }
+    .mb.sec { background: transparent; border: 1.5px solid var(--border); color: var(--gray1); }
+    .mb:hover { opacity: .85; }
+
+    .spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--teal); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 10px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(50px); background: var(--card2); border: 1.5px solid var(--teal); color: var(--teal); font-family: var(--display); font-size: 10px; letter-spacing: .06em; padding: 7px 18px; border-radius: 6px; transition: transform .3s ease; z-index: 200; pointer-events: none; }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="logo">
+      <span class="lm">m</span><span class="lr">nemo</span>
+    </div>
+    <div class="hdr-r" id="header-info"></div>
+  </div>
+
+  <!-- INTAKE SCREEN -->
+  <div id="intake-screen" class="intake">
+    <div class="hero">
+      <div class="hero-title">
+        <span class="hm">m</span><span class="hr">nemo</span>
+      </div>
+      <div class="hero-tag">SPEED READING REIMAGINED</div>
+      <div class="hero-stats">
+        <div class="hs">
+          <div class="hs-n" id="stat-wc">0</div>
+          <div class="hs-l">WORDS</div>
+        </div>
+        <div class="hs">
+          <div class="hs-n" id="stat-time">0m</div>
+          <div class="hs-l">TIME</div>
+        </div>
+        <div class="hs">
+          <div class="hs-n" id="stat-pages">0</div>
+          <div class="hs-l">PAGES</div>
+        </div>
+      </div>
+    </div>
+
+    <textarea id="input-text" placeholder="Paste text, upload PDF/EPUB, or PPTX here..."></textarea>
+
+    <div class="divider">
+      <div class="divider-line"></div>
+      <div class="divider-lbl">OR</div>
+      <div class="divider-line"></div>
+    </div>
+
+    <div class="upload" id="upload-btn">
+      <span style="font-size: 18px;">📄</span>
+      <span class="upload-txt" id="upload-label">PDF, EPUB, or PPTX</span>
+    </div>
+    <input type="file" id="file-input" style="display:none" accept=".pdf,.epub,.pptx">
+    <div class="ch-status" id="ch-status"></div>
+
+    <div id="est-row" class="est-row">
+      <div class="est-pill">
+        <span class="en" id="est-mins">0</span> min read
+      </div>
+      <div class="est-pill">
+        <span class="en" id="est-pages">0</span> pages
+      </div>
+    </div>
+
+    <div class="focus-row">
+      <div class="focus-lbl">FOCUS (OPTIONAL)</div>
+      <input type="text" class="focus-in" id="focus-input" placeholder="e.g. 'Only Chapter 1'">
+    </div>
+
+    <button class="go-btn" id="go-btn">START READING</button>
+
+    <div id="bookmarks-sec" class="bm-sec">
+      <div class="bm-hdr">RECENT BOOKMARKS</div>
+      <div class="bm-list" id="bookmarks-list"></div>
+    </div>
+  </div>
+
+  <!-- PRIMING SCREEN -->
+  <div id="prime-screen" class="prime-screen hidden">
+    <div class="p-icon">M</div>
+    <div class="p-title">
+      <span class="pm">m</span><span class="pr">nemo</span>
+    </div>
+    <div class="p-status" id="prime-status">Analyzing text...</div>
+    <div class="p-steps" id="prime-steps"></div>
+    <div class="schema" id="schema-box" style="display:none;">
+      <div class="schema-lbl">SUMMARY</div>
+      <div class="schema-txt" id="schema-summary"></div>
+      <div class="schema-kws" id="schema-kws"></div>
+    </div>
+    <button class="start-btn" id="start-btn" style="display:none;">START READING</button>
+  </div>
+
+  <!-- READER SCREEN -->
+  <div id="reader-screen" class="reader-screen hidden">
+    <div class="prog-wrap">
+      <div class="wpm-b" id="wpm-display">350 WPM</div>
+      <div class="prog-tr">
+        <div class="prog-f" id="prog-fill" style="width:0%"></div>
+      </div>
+      <div class="prog-p" id="prog-pct">0%</div>
+    </div>
+
+    <div class="reader-stage">
+      <div class="orp-wrap">
+        <div class="orp-tick orp-tick-t"></div>
+        <div class="orp-word" id="orp-word">
+          <span class="ob" id="orp-before"></span><span class="op" id="orp-pivot">—</span><span class="oa" id="orp-after"></span>
+        </div>
+        <div class="orp-tick orp-tick-b"></div>
+      </div>
+
+      <div class="wbar-wrap" id="wbar-wrap">
+        <div class="wbar-label">SEMANTIC WEIGHT</div>
+        <div class="wbar-inner" id="wbar-inner"></div>
+        <div class="wbar-cursor" id="wbar-cursor" style="left:0%"></div>
+      </div>
+
+      <div class="ch-lbl" id="ch-lbl"></div>
+    </div>
+
+    <div class="reader-ctrls">
+      <button class="cb" id="pause-btn">PAUSE</button>
+      <button class="cb" id="back-btn">← PREV</button>
+      <button class="cb" id="skip-btn">NEXT →</button>
+      <div class="wpm-wrap">
+        <button class="cb" style="padding: 0 8px;" id="wpm-down">−</button>
+        <input type="range" id="wpm-slider" min="150" max="600" value="350">
+        <button class="cb" style="padding: 0 8px;" id="wpm-up">+</button>
+        <span class="wpm-v" id="wpm-val">350</span>
+      </div>
+      <button class="cb sav" id="bm-btn">BOOKMARK</button>
+      <button class="cb toc-btn" id="toc-btn">CHAPTERS</button>
+    </div>
+  </div>
+
+  <!-- SUMMARY SCREEN -->
+  <div id="summary-screen" class="sum-in hidden">
+    <div class="sum-done">READING COMPLETE</div>
+    <div class="sum-hl">
+      <span class="sh-w">Well done!</span>
+      <span class="sh-t">Keep learning</span>
+    </div>
+    <div class="sum-stats">
+      <div class="sc">
+        <div class="sc-n" id="sum-words">0</div>
+        <div class="sc-l">WORDS</div>
+      </div>
+      <div class="sc">
+        <div class="sc-n" id="sum-time">0m</div>
+        <div class="sc-l">TIME</div>
+      </div>
+      <div class="sc">
+        <div class="sc-n" id="sum-wpm">350</div>
+        <div class="sc-l">AVG WPM</div>
+      </div>
+    </div>
+
+    <div class="ret-sec">
+      <div class="ret-lbl">RETENTION (EBBINGHAUS)</div>
+      <div class="ret-card">
+        <canvas class="ret-curve" id="ret-canvas" width="600" height="100"></canvas>
+        <div class="ret-now" id="ret-now">—</div>
+        <div class="ret-now-l" id="ret-now-l"></div>
+      </div>
+      <div class="ret-note">You'll forget ~60% in 24h. Review to lock in learning.</div>
+    </div>
+
+    <div class="sum-sec">
+      <div class="ss-t">KEY TAKEAWAYS</div>
+      <div class="sum-txt" id="sum-takeaways"></div>
+    </div>
+
+    <div class="sum-sec">
+      <div class="ss-t">REVIEW FLASHCARDS</div>
+      <div class="fc-list" id="fc-list"></div>
+      <div class="fc-progress" id="fc-progress"></div>
+    </div>
+
+    <div class="sum-acts">
+      <button class="s-btn pri" id="re-btn">READ AGAIN</button>
+      <button class="s-btn sec" id="new-btn">NEW TEXT</button>
+    </div>
+  </div>
+
+  <!-- BOOKMARK MODAL -->
+  <div class="modal" id="bm-modal">
+    <div class="m-card">
+      <div class="m-lbl">BOOKMARK</div>
+      <div class="m-ttl" id="bm-title"></div>
+      <div class="m-body" id="bm-body"></div>
+      <div style="font-size:13px; color: var(--gray2); margin-bottom: 16px;">
+        <div>Retention: <span id="bm-ret" style="color: var(--teal); font-weight: 700;">—</span></div>
+      </div>
+      <div class="m-btns">
+        <button class="mb sec" id="bm-cancel">CANCEL</button>
+        <button class="mb pri" id="bm-resume">RESUME</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── CONFIG ──
+    const API_BASE = "https://mnemo-app.vercel.app";
+    const BASE_DELAY = Math.round(((60000 / 350) * 0.8 * 0.7)); // ~196ms
+    const WEIGHTED_DELAY = Math.round(300 * 0.7); // ~210ms
+    const INTRO_DELAY = Math.round(BASE_DELAY * 1.1) + 100; // ~316ms
+    const MODEL_SMART = "claude-sonnet-4-20250514";
+    const MODEL_FAST = "claude-haiku-4-5-20251001";
+
+    // ── STATE ──
+    let state = {
+      screen: "intake",
+      inputText: "",
+      chapters: [],
+      words: [],
+      currentIdx: 0,
+      wpm: 350,
+      isPaused: true,
+      schema: null,
+      flashcards: [],
+      bookmarks: [],
+      sessionStart: 0,
+      wordColors: {},
+      weightBars: [],
+    };
+
+    // ── DOM REFS ──
+    const intake = document.getElementById("intake-screen");
+    const prime = document.getElementById("prime-screen");
+    const reader = document.getElementById("reader-screen");
+    const summary = document.getElementById("summary-screen");
+    const inputEl = document.getElementById("input-text");
+    const goBtn = document.getElementById("go-btn");
+    const fileInput = document.getElementById("file-input");
+    const uploadBtn = document.getElementById("upload-btn");
+
+    // ── UTILS ──
+    function tok(t) {
+      return t.trim().split(/\s+/).filter(w => w.length > 0);
+    }
+
+    function pivot(w) {
+      const c = w.replace(/[^a-zA-Z0-9]/g, "");
+      const l = c.length;
+      if (l <= 1) return 0;
+      if (l <= 5) return 1;
+      return Math.floor(l * 0.35);
+    }
+
+    function fmtTime(ms) {
+      const s = Math.round(ms / 1000);
+      if (s < 60) return s + "s";
+      const m = Math.floor(s / 60), r = s % 60;
+      return r ? m + "m " + r + "s" : m + "m";
+    }
+
+    function retCalc(h, wpm) {
+      return Math.exp(-h / Math.max(1, 28 - (wpm - 150) / 40));
+    }
+
+    function showScreen(name) {
+      state.screen = name;
+      intake.classList.toggle("hidden", name !== "intake");
+      prime.classList.toggle("hidden", name !== "prime");
+      reader.classList.toggle("hidden", name !== "reader");
+      summary.classList.toggle("hidden", name !== "summary");
+    }
+
+    function toast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2200);
+    }
+
+    // ── WORD COLORING (AI) ──
+    async function callAI(prompt) {
+      try {
+        const res = await fetch(API_BASE + "/api/prime", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: MODEL_SMART,
+            max_tokens: 1000,
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+        if (!res.ok) return "";
+        const data = await res.json();
+        return data.content?.map(c => c.text || "").join("") || "";
+      } catch (e) {
+        console.error("AI call failed:", e);
+        return "";
+      }
+    }
+
+    async function getWordColors(words) {
+      if (words.length === 0) return [];
+      const colors = new Array(words.length).fill(null);
+
+      // Fallback: local heuristic
+      for (let i = 0; i < words.length; i++) {
+        const w = words[i];
+        if (/^[A-Z]/.test(w) && w.length > 3) {
+          colors[i] = "orange"; // Named entities
+        } else if (w.length > 8) {
+          colors[i] = "green"; // Long/descriptive words
+        }
+      }
+
+      // Try AI if available
+      const prompt = `For each word below, respond with ONLY its color (or "-" for none): orange (core concepts), green (qualifiers), or - (neutral). One line per word:\n${words.slice(0, 50).join("\n")}`;
+      const aiRes = await callAI(prompt);
+      if (aiRes) {
+        const lines = aiRes.split("\n");
+        for (let i = 0; i < Math.min(lines.length, 50); i++) {
+          const line = lines[i].trim().toLowerCase();
+          if (line === "orange") colors[i] = "orange";
+          else if (line === "green") colors[i] = "green";
+        }
+      }
+
+      return colors;
+    }
+
+    // ── FILE UPLOAD ──
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error("Failed to load " + src));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function handleFile(file) {
+      try {
+        if (file.name.endsWith(".pdf")) {
+          await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+          const pdfjsLib = window.pdfjsLib;
+          pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+          const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+          let text = "";
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const pg = await pdf.getPage(i);
+            const ct = await pg.getTextContent();
+            text += ct.items.map(it => it.str).join(" ") + "\n\n";
+          }
+          inputEl.value = text.trim();
+          document.getElementById("ch-status").textContent = "✓ PDF loaded";
+          toast("PDF loaded");
+        } else if (file.name.endsWith(".epub")) {
+          await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
+          const JSZipLib = window.JSZip;
+          const zip = await JSZipLib.loadAsync(await file.arrayBuffer());
+          let text = "";
+          const files = [];
+          zip.forEach((p, e) => {
+            if (/\.(xhtml|html|htm)$/i.test(p) && !p.includes("toc")) files.push({ path: p, entry: e });
+          });
+          files.sort((a, b) => a.path.localeCompare(b.path));
+          for (const { entry } of files) {
+            const h = await entry.async("string");
+            const d = document.createElement("div");
+            d.innerHTML = h;
+            d.querySelectorAll("script,style,nav").forEach(el => el.remove());
+            text += d.textContent + "\n\n";
+          }
+          inputEl.value = text.trim();
+          document.getElementById("ch-status").textContent = "✓ EPUB loaded";
+          toast("EPUB loaded");
+        } else if (file.name.endsWith(".pptx")) {
+          await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
+          const JSZipLib = window.JSZip;
+          const zip = await JSZipLib.loadAsync(await file.arrayBuffer());
+
+          // Parse presentation.xml.rels for rId -> slide mapping
+          const relsXml = await zip.file("ppt/_rels/presentation.xml.rels")?.async("string");
+          const relsDoc = new DOMParser().parseFromString(relsXml, "text/xml");
+          const rIdMap = {};
+          relsDoc.querySelectorAll("Relationship").forEach(rel => {
+            const id = rel.getAttribute("Id");
+            const target = rel.getAttribute("Target");
+            if (target.includes("slide")) rIdMap[id] = target;
+          });
+
+          // Parse presentation.xml for ordered slide list
+          const presXml = await zip.file("ppt/presentation.xml")?.async("string");
+          const presDoc = new DOMParser().parseFromString(presXml, "text/xml");
+          const slideOrder = [];
+          presDoc.querySelectorAll("p\\:sldId").forEach(sld => {
+            const rId = sld.getAttribute("r:id") || sld.getAttribute("rid");
+            if (rIdMap[rId]) slideOrder.push(rIdMap[rId]);
+          });
+
+          let text = "";
+          for (let i = 0; i < slideOrder.length; i++) {
+            const slidePath = "ppt/" + slideOrder[i];
+            const slideXml = await zip.file(slidePath)?.async("string");
+            if (!slideXml) continue;
+            const slideDoc = new DOMParser().parseFromString(slideXml, "text/xml");
+            const slideText = Array.from(slideDoc.querySelectorAll("a\\:t")).map(t => t.textContent).join(" ");
+            text += slideText + "\n\n--- Slide " + (i + 1) + " ---\n\n";
+          }
+          inputEl.value = text.trim();
+          document.getElementById("ch-status").textContent = "✓ PPTX loaded";
+          toast("PPTX loaded");
+        }
+        updateStats();
+      } catch (e) {
+        console.error(e);
+        toast("Could not read file");
+      }
+    }
+
+    uploadBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", (e) => {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    });
+
+    // ── INTAKE STATS ──
+    function updateStats() {
+      const words = tok(inputEl.value);
+      const wc = words.length;
+      const mins = Math.max(1, Math.round(wc / 350));
+      const pages = Math.max(1, Math.round(wc / 238));
+
+      document.getElementById("stat-wc").textContent = wc;
+      document.getElementById("stat-time").textContent = mins + "m";
+      document.getElementById("stat-pages").textContent = pages;
+      document.getElementById("est-mins").textContent = mins;
+      document.getElementById("est-pages").textContent = pages;
+      document.getElementById("est-row").classList.toggle("vis", wc > 0);
+    }
+
+    inputEl.addEventListener("input", updateStats);
+    updateStats();
+
+    // ── PRIMING ──
+    async function startPriming() {
+      state.inputText = inputEl.value;
+      state.words = tok(state.inputText).map((t, i) => ({
+        text: t,
+        color: null,
+        idx: i
+      }));
+
+      if (state.words.length === 0) {
+        toast("Enter text first");
+        return;
+      }
+
+      showScreen("prime");
+      const steps = ["Analyzing content", "Mapping semantics", "Generating flashcards", "Ready to read"];
+      document.getElementById("prime-steps").innerHTML = steps.map((s, i) =>
+        `<div class="p-step" id="step-${i}"><div class="s-dot"></div>${s}</div>`
+      ).join("");
+
+      // Simulate priming steps
+      for (let i = 0; i < steps.length; i++) {
+        document.getElementById("step-" + i).classList.add("active");
+        document.getElementById("prime-status").textContent = steps[i] + "...";
+        await new Promise(r => setTimeout(r, 800));
+        document.getElementById("step-" + i).classList.remove("active");
+        document.getElementById("step-" + i).classList.add("done");
+      }
+
+      // Get word colors
+      const wordTexts = state.words.map(w => w.text).slice(0, 100);
+      const colors = await getWordColors(wordTexts);
+      for (let i = 0; i < colors.length; i++) {
+        state.words[i].color = colors[i];
+      }
+
+      // Generate schema
+      const sentences = state.inputText.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      state.schema = {
+        summary: sentences.slice(0, 2).join(". ").slice(0, 200),
+        keywords: state.words.filter(w => /^[A-Z]/.test(w.text)).slice(0, 5).map(w => w.text)
+      };
+
+      // Generate flashcards
+      state.flashcards = sentences.filter(s => s.trim().length > 10).slice(0, 3).map((s, i) => ({
+        q: ["Main topic?", "Key detail?", "Also mentioned?"][i] || "?",
+        a: s.slice(0, 80)
+      }));
+
+      document.getElementById("schema-summary").textContent = state.schema.summary;
+      document.getElementById("schema-kws").innerHTML = state.schema.keywords.map(k =>
+        `<div class="kw">${k}</div>`
+      ).join("");
+      document.getElementById("schema-box").style.display = "block";
+      document.getElementById("start-btn").style.display = "inline-block";
+      document.getElementById("prime-status").textContent = "Ready!";
+    }
+
+    goBtn.addEventListener("click", startPriming);
+    document.getElementById("start-btn").addEventListener("click", startReader);
+
+    // ── READER ──
+    let readerTimer = null;
+    let sessionStartTime = 0;
+
+    function updateReaderDisplay() {
+      if (state.currentIdx >= state.words.length) {
+        endSession();
+        return;
+      }
+
+      const w = state.words[state.currentIdx];
+
+      // Split the single word into before-chars / pivot-letter / after-chars
+      const txt = w.text;
+      const p   = pivot(txt);
+      document.getElementById("orp-before").textContent = txt.slice(0, p);
+      document.getElementById("orp-pivot").textContent  = txt[p] || "";
+      document.getElementById("orp-after").textContent  = txt.slice(p + 1);
+
+      const orp = document.getElementById("orp-word");
+      orp.className = "orp-word";
+      if (w.color === "orange") orp.classList.add("c-orange");
+      else if (w.color === "green") orp.classList.add("c-green");
+
+      const pct = Math.round((state.currentIdx / state.words.length) * 100);
+      document.getElementById("prog-fill").style.width = pct + "%";
+      document.getElementById("prog-pct").textContent = pct + "%";
+      document.getElementById("wbar-cursor").style.left = pct + "%";
+
+      state.currentIdx++;
+    }
+
+    function scheduleNextWord() {
+      if (state.isPaused) return;
+
+      const w = state.words[state.currentIdx];
+      const baseDelay = BASE_DELAY * (350 / state.wpm);
+      const delay = (w.color ? WEIGHTED_DELAY : baseDelay) * (350 / state.wpm);
+
+      updateReaderDisplay();
+      readerTimer = setTimeout(scheduleNextWord, delay);
+    }
+
+    function startReader() {
+      showScreen("reader");
+      state.isPaused = false;
+      sessionStartTime = Date.now();
+      state.currentIdx = 0;
+      buildWeightBars();
+      scheduleNextWord();
+    }
+
+    function buildWeightBars() {
+      const bars = [];
+      const colors = state.words.map(w => w.color);
+      for (let i = 0; i < Math.min(colors.length, 100); i += Math.ceil(colors.length / 100)) {
+        const c = colors[i];
+        bars.push({
+          h: c ? 30 : 10,
+          c: c === "orange" ? "var(--orange)" : c === "green" ? "var(--teal)" : "var(--border)"
+        });
+      }
+      state.weightBars = bars;
+      const barInner = document.getElementById("wbar-inner");
+      barInner.innerHTML = bars.map(b =>
+        `<div class="wb" style="background:${b.c};height:${b.h}px;"></div>`
+      ).join("");
+    }
+
+    document.getElementById("pause-btn").addEventListener("click", () => {
+      state.isPaused = !state.isPaused;
+      document.getElementById("pause-btn").textContent = state.isPaused ? "RESUME" : "PAUSE";
+      if (!state.isPaused) scheduleNextWord();
+    });
+
+    document.getElementById("skip-btn").addEventListener("click", () => {
+      if (readerTimer) clearTimeout(readerTimer);
+      scheduleNextWord();
+    });
+
+    document.getElementById("back-btn").addEventListener("click", () => {
+      if (readerTimer) clearTimeout(readerTimer);
+      state.currentIdx = Math.max(0, state.currentIdx - 2);
+      updateReaderDisplay();
+    });
+
+    document.getElementById("wpm-slider").addEventListener("input", (e) => {
+      state.wpm = parseInt(e.target.value);
+      document.getElementById("wpm-val").textContent = state.wpm;
+      document.getElementById("wpm-display").textContent = state.wpm + " WPM";
+    });
+
+    document.getElementById("wpm-down").addEventListener("click", () => {
+      state.wpm = Math.max(150, state.wpm - 50);
+      document.getElementById("wpm-slider").value = state.wpm;
+      document.getElementById("wpm-val").textContent = state.wpm;
+      document.getElementById("wpm-display").textContent = state.wpm + " WPM";
+    });
+
+    document.getElementById("wpm-up").addEventListener("click", () => {
+      state.wpm = Math.min(600, state.wpm + 50);
+      document.getElementById("wpm-slider").value = state.wpm;
+      document.getElementById("wpm-val").textContent = state.wpm;
+      document.getElementById("wpm-display").textContent = state.wpm + " WPM";
+    });
+
+    document.getElementById("bm-btn").addEventListener("click", () => {
+      const bm = {
+        title: state.words.slice(0, 4).map(w => w.text).join(" "),
+        pos: state.currentIdx,
+        wpm: state.wpm,
+        words: state.words.length,
+        time: Date.now() - sessionStartTime
+      };
+      state.bookmarks.push(bm);
+      localStorage.setItem("mnemo-bookmarks", JSON.stringify(state.bookmarks));
+      toast("Bookmark saved");
+    });
+
+    // ── SUMMARY ──
+    function endSession() {
+      if (readerTimer) clearTimeout(readerTimer);
+      const elapsed = Date.now() - sessionStartTime;
+      const wpmAvg = Math.round((state.words.length / elapsed) * 60000);
+
+      document.getElementById("sum-words").textContent = state.words.length;
+      document.getElementById("sum-time").textContent = fmtTime(elapsed);
+      document.getElementById("sum-wpm").textContent = wpmAvg;
+
+      // Ebbinghaus curve
+      const canvas = document.getElementById("ret-canvas");
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "var(--teal)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i <= canvas.width; i++) {
+        const h = i / canvas.width * 7; // 7 days
+        const ret = retCalc(h, wpmAvg) * canvas.height;
+        if (i === 0) ctx.moveTo(i, canvas.height - ret);
+        else ctx.lineTo(i, canvas.height - ret);
+      }
+      ctx.stroke();
+
+      // Flashcards
+      const fcList = document.getElementById("fc-list");
+      fcList.innerHTML = state.flashcards.map((fc, i) => `
+        <div class="fc-card" data-idx="${i}">
+          <div class="fc-card-inner">
+            <div class="fc-front">
+              <div class="fc-label">QUESTION</div>
+              <div class="fc-text">${fc.q}</div>
+            </div>
+            <div class="fc-back">
+              <div class="fc-label">ANSWER</div>
+              <div class="fc-text">${fc.a}</div>
+            </div>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".fc-card").forEach(card => {
+        card.addEventListener("click", (e) => {
+          e.currentTarget.classList.toggle("flipped");
+        });
+      });
+
+      showScreen("summary");
+    }
+
+    document.getElementById("re-btn").addEventListener("click", () => {
+      showScreen("intake");
+      inputEl.focus();
+    });
+
+    document.getElementById("new-btn").addEventListener("click", () => {
+      inputEl.value = "";
+      updateStats();
+      showScreen("intake");
+      inputEl.focus();
+    });
+
+    // ── INIT ──
+    if (localStorage.getItem("mnemo-bookmarks")) {
+      state.bookmarks = JSON.parse(localStorage.getItem("mnemo-bookmarks"));
+    }
+  </script>
+</body>
+</html>
