@@ -1143,7 +1143,7 @@ function MnemoAppInner() {
   // ── Chunked AI word weighting with familiarity decay ──
   // Tracks word frequency across chunks so repeated terms get de-weighted over time
   async function getWordColorsChunked(words: string[], docContext = ""): Promise<(string | null)[]> {
-    const CHUNK_SIZE = 800;
+    const CHUNK_SIZE = 250; // Smaller chunks = shorter JSON arrays = more reliable Llama output
     const totalWords = words.length;
 
     // Build a running word frequency map — only track "significant" words (4+ chars, not common)
@@ -1231,62 +1231,44 @@ function MnemoAppInner() {
 
     const maxPct = Math.round(wc * 0.06); // 6% budget across the whole chunk
     const prompt =
-      'Return ONLY valid JSON. You are a senior editor annotating a text for a speed-reading app.\n\n' +
-      docNote +
-      'FULL PASSAGE:\n"""' + contextText.slice(0, 3000) + '"""\n\n' +
-      '═══ STEP 1 — READ BEFORE YOU SCORE ═══\n' +
-      'Before assigning any color, read the entire passage above. Ask:\n' +
-      '  • What is the central argument or thesis of this text?\n' +
-      '  • Which 1–3 sentences are LOAD-BEARING — the ones the whole argument stands on?\n' +
-      '  • Which sentences are transitional, illustrative, or elaborating (supporting cast)?\n' +
-      'You will concentrate highlights on load-bearing sentences and leave supporting sentences sparse.\n\n' +
-      '═══ STEP 2 — BUDGET YOUR HIGHLIGHTS ═══\n' +
-      'Total highlight budget: ' + maxPct + ' words across this entire ' + wc + '-word block.\n' +
-      'Cognitive load research (Sweller 1988; Dunlosky et al. 2013) shows highlighting above ~6–8% of\n' +
-      'words destroys the contrast signal — everything looks important, so nothing is.\n' +
-      'Distribute your budget UNEVENLY:\n' +
-      '  • A pivotal sentence may use 4–6 highlights if the argument truly demands it.\n' +
-      '  • A transitional or elaborating sentence should use 0.\n' +
-      '  • The total across all sentences must stay ≤ ' + maxPct + '.\n\n' +
-      '═══ STEP 3 — SCORING RULES ═══\n\n' +
-      '"orange" — IRREPLACEABLE FACTS (always take priority in your budget):\n' +
-      '  • Every specific number, statistic, percentage, age, ratio, or measurement.\n' +
-      '    Numbers cannot be reconstructed from context. They are always orange.\n' +
-      '    → "45.0", "2.7 million", "0.1%", "1.8x", "13 milliseconds", "250 WPM", "80%"\n' +
-      '  • The text\'s own coined or specialist term, on its first use.\n' +
-      '    Highlight ALL words in the unit: "visual anchor" = both orange.\n\n' +
-      '"green" — THE ARGUMENT\'S KEY CLAIM WORDS:\n' +
-      '  • The word(s) that carry the actual CONTENT of the argument — the finding, the contrast,\n' +
-      '    the claim — not the words that describe how it was argued.\n' +
-      '  • In a PIVOTAL sentence: multiple greens are fine if they each carry distinct meaning.\n' +
-      '  • In a SUPPORTING sentence: zero or one green.\n' +
-      '  • Always ask: "Is this the claim itself, or just a description of the claim?"\n' +
-      '    → "middle-aged" = the claim → green\n' +
-      '    → "conclude", "explicitly", "authors", "show" = description of the claim → null\n\n' +
-      '═══ NEVER HIGHLIGHT — THESE ARE ALWAYS NULL ═══\n' +
-      '• Verbs of attribution: conclude, find, show, suggest, argue, report, indicate,\n' +
-      '  demonstrate, note, state, claim, prove, reveal, confirm, establish\n' +
-      '• Manner adverbs: explicitly, clearly, strongly, simply, directly, importantly, notably\n' +
-      '• Generic academic nouns used as filler: evidence, research, study, analysis, results\n' +
-      '  (Exception: highlight if the text is specifically defining what these terms mean)\n' +
-      '• All function words: the, a, an, of, in, that, which, and, or, but, with, by, to, for\n' +
-      '• Vague qualifiers: broad, large-scale, major, significant, important, key, various\n' +
-      '• Any word already highlighted earlier in the text (familiarity decay)\n\n' +
-      '═══ FAMILIARITY DECAY ═══\n' +
-      familiarNote + '\n\n' +
-      '═══ CALIBRATION EXAMPLE ═══\n' +
-      'Passage contains two sentences:\n' +
-      'S1 (PIVOTAL): "The mean founder age for the fastest-growing 0.1% of startups is 45.0 — and\n' +
-      '  successful entrepreneurs are middle-aged, not young."\n' +
-      'S2 (TRANSITIONAL): "This finding has been replicated across multiple datasets."\n' +
-      'CORRECT scoring:\n' +
-      '  S1: "0.1%" → orange, "45.0" → orange, "middle-aged" → green, "young" → green\n' +
-      '      (4 highlights on the pivotal sentence — it earns them)\n' +
-      '  S2: everything → null (transitional — adds no new claim)\n' +
-      '  NOT highlighted: "fastest-growing", "startups", "successful", "entrepreneurs",\n' +
-      '    "conclude", "explicitly", "finding", "replicated", "datasets"\n\n' +
-      '{"wordColors":[EXACTLY ' + wc + ' values, one per word, total non-null ≤ ' + maxPct + ']}\n\n' +
-      'Words to score (' + wc + '): ' + wl;
+      'You are a senior editor annotating text for a speed-reading app. Return ONLY valid JSON.\n\n' +
+      '=== OUTPUT FORMAT (STRICT) ===\n' +
+      'Return exactly this JSON structure:\n' +
+      '{"wordColors": [value, value, ...]}\n\n' +
+      'VALID VALUES — only these three, nothing else:\n' +
+      '  "orange"  → a specific number, statistic, percentage, or coined specialist term\n' +
+      '  "green"   → a load-bearing claim word (the actual finding or contrast, not a description of it)\n' +
+      '  null      → everything else (use JSON null, not the string "null")\n\n' +
+      'The array must have EXACTLY ' + wc + ' values — one per word in order.\n' +
+      'Maximum non-null values allowed: ' + maxPct + ' (about 6% of words).\n\n' +
+      '=== HOW TO SCORE ===\n\n' +
+      'STEP 1: Read the full passage. Identify:\n' +
+      '  - The central argument or thesis\n' +
+      '  - Which 1-3 sentences are LOAD-BEARING (the argument stands on these)\n' +
+      '  - Which sentences are transitional, illustrative, or elaborating\n\n' +
+      'STEP 2: Distribute your ' + maxPct + '-word budget UNEVENLY:\n' +
+      '  - A pivotal sentence can use 3-5 highlights\n' +
+      '  - A transitional or example sentence gets 0\n\n' +
+      'STEP 3: Apply these rules:\n' +
+      '  orange: every specific number/stat/% ("45.0", "0.1%", "2.7 million"). Always orange.\n' +
+      '  orange: coined or specialist term on first use ("optimal recognition point" = both words orange)\n' +
+      '  green: the word that IS the claim ("middle-aged" not "researchers found middle-aged")\n' +
+      '  null: attribution verbs (find, show, suggest, argue, conclude, demonstrate)\n' +
+      '  null: manner adverbs (clearly, explicitly, strongly, directly, importantly)\n' +
+      '  null: all function words (the, a, an, of, in, that, and, or, but, by, to, for)\n' +
+      '  null: vague qualifiers (major, significant, important, various, broad)\n' +
+      '  null: repeated terms already seen earlier in the text\n\n' +
+      (familiarNote ? '=== FAMILIARITY DECAY ===\n' + familiarNote + '\n\n' : '') +
+      '=== EXAMPLE ===\n' +
+      'Text: "The mean founder age for the fastest-growing 0.1% of startups is 45.0 — successful entrepreneurs are middle-aged, not young. This finding has been replicated across datasets."\n' +
+      'Words: The mean founder age for the fastest-growing 0.1% of startups is 45.0 — successful entrepreneurs are middle-aged, not young. This finding has been replicated across datasets.\n' +
+      'Answer: {"wordColors":[null,null,null,null,null,null,null,"orange",null,null,null,"orange",null,null,null,null,null,"green",null,"green",null,null,null,null,null,null,null,null]}\n\n' +
+      (docNote ? '=== DOCUMENT CONTEXT ===\n' + docNote + '\n' : '') +
+      '=== PASSAGE TO SCORE ===\n' +
+      contextText.slice(0, 4000) + '\n\n' +
+      '=== WORDS TO SCORE (' + wc + ' words) ===\n' +
+      wl + '\n\n' +
+      'Return the JSON now. Array must have exactly ' + wc + ' values.';
 
     // Use Sonnet for semantic weighting — requires deep language understanding
     const raw = await callClaude([{ role: "user", content: prompt }], 3000, MODEL_SMART);
