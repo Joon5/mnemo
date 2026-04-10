@@ -1158,7 +1158,7 @@ function MnemoAppInner() {
     const normalize = (w: string) => w.toLowerCase().replace(/[^a-z]/g, "");
 
     if (totalWords <= CHUNK_SIZE) {
-      return await getWordColorsForChunk(words, 0, words.join(" "), {}, docContext);
+      return await getWordColorsForChunk(words, 0, words.join(" "), {}, docContext, totalWords);
     }
 
     const allColors: (string | null)[] = new Array(totalWords).fill(null);
@@ -1184,7 +1184,7 @@ function MnemoAppInner() {
           const contextBefore = words.slice(Math.max(0, start - 100), start).join(" ");
           const contextAfter = words.slice(end, Math.min(totalWords, end + 100)).join(" ");
           const fullContext = [contextBefore, chunkWords.join(" "), contextAfter].filter(Boolean).join(" ... ");
-          return getWordColorsForChunk(chunkWords, start, fullContext, freqSnapshot, docContext);
+          return getWordColorsForChunk(chunkWords, start, fullContext, freqSnapshot, docContext, totalWords);
         })
       );
 
@@ -1211,7 +1211,8 @@ function MnemoAppInner() {
     startIdx: number,
     contextText: string,
     wordFreqBefore: Record<string, number>, // how many times each word appeared before this chunk
-    docContext = ""
+    docContext = "",
+    totalDocWords = 0  // total word count of the full text, used for length-aware green budget
   ): Promise<(string | null)[]> {
     const wc = chunkWords.length;
     const maxHighlighted = Math.max(3, Math.round(wc * 0.08));
@@ -1230,7 +1231,16 @@ function MnemoAppInner() {
       ? 'DOCUMENT CONTEXT (global themes and key terms — use this to understand what matters across the whole text):\n"""' + docContext + '"""\n\n'
       : '';
 
-    const greenBudget = Math.max(4, Math.round(wc * 0.10)); // ~10% green
+    // Length-aware green budget: shorter texts need higher density (paragraph = detail retention),
+    // longer texts need lower density (book = only the truly load-bearing words).
+    const docLen = totalDocWords || wc;
+    const greenPct =
+      docLen < 150   ? 0.18 :  // single paragraph — weight heavily
+      docLen < 500   ? 0.13 :  // article section
+      docLen < 2000  ? 0.10 :  // short article
+      docLen < 10000 ? 0.07 :  // long article / chapter
+                       0.04;   // book-length — sparse, only thesis-critical words
+    const greenBudget = Math.max(3, Math.round(wc * greenPct));
     const numberedWords = chunkWords.map((w, i) => i + ':' + w).join(' ');
     const prompt =
       'You are a semantic analysis engine for a speed-reading system. Return ONLY valid JSON.\n\n' +
@@ -1304,7 +1314,7 @@ function MnemoAppInner() {
     });
 
     // ── Pass 2: AI weighting — finds green claim words, may also add orange ──
-    const raw = await callClaude([{ role: "user", content: prompt }], 3000, MODEL_SMART);
+    const raw = await callClaude([{ role: "user", content: prompt }], 1500, MODEL_SMART);
 
     // Words that are NEVER green regardless of what the model returns
     const NEVER_GREEN = new Set([

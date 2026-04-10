@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const groqBody: Record<string, unknown> = {
-      model: 'llama-3.1-8b-instant',
+      model: body.model || 'llama-3.1-8b-instant', // respect caller's model choice (e.g. 70B for weighting)
       messages,
       max_tokens: body.max_tokens || 1000,
       temperature: 0.1,   // Low = consistent, predictable JSON structure
