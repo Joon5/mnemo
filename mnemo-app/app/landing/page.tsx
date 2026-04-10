@@ -40,25 +40,25 @@ export default function LandingPage() {
     <div style={styles.container}>
       <style>{`
         :root {
-          --bg: #0b1623;
-          --card: #111f2e;
-          --card2: #0d1e2e;
-          --border: #1e3347;
-          --border2: #1e2f42;
+          --bg: #0a0a0a;
+          --card: #141414;
+          --card2: #111111;
+          --border: #222222;
+          --border2: #1a1a1a;
           --teal: #00c896;
           --teal2: #00a87a;
-          --teal-dim: rgba(0, 200, 150, 0.15);
+          --teal-dim: rgba(0, 200, 150, 0.12);
           --orange: #f5a623;
-          --orange-dim: rgba(245, 166, 35, 0.18);
+          --orange-dim: rgba(245, 166, 35, 0.15);
           --red: #e05555;
-          --white: #fff;
-          --gray1: #e8edf2;
-          --gray2: #a8b5c2;
-          --gray3: #3a5068;
-          --gray4: #1e3347;
+          --white: #e8e8e8;
+          --gray1: #e8e8e8;
+          --gray2: #aaaaaa;
+          --gray3: #555555;
+          --gray4: #333333;
           --mono: 'Courier New', monospace;
-          --ui: 'DM Sans', Calibri, sans-serif;
-          --display: 'Space Mono', monospace;
+          --ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          --display: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
       `}</style>
 

@@ -237,6 +237,7 @@ function MnemoAppInner() {
   );
   const [primeStatus, setPrimeStatus] = useState("Analyzing text…");
   const [schema, setSchema] = useState<Schema | null>(null);
+  const [primeDone, setPrimeDone] = useState(false);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
 
@@ -1342,6 +1343,7 @@ function MnemoAppInner() {
     readerRef.current.cpResultsRef = [];
     setCpResults([]);
     setSchema(null);
+    setPrimeDone(false);
     setPrimeSteps(["active", "idle", "idle", "idle"]);
     setPrimeStatus("Analyzing text…");
     setScreen("prime");
@@ -1544,6 +1546,7 @@ function MnemoAppInner() {
 
     setPrimeSteps(["done", "done", "done", "done"]);
     setPrimeStatus("Ready.");
+    setPrimeDone(true);
   }
 
   // ── Reader ──
@@ -2043,20 +2046,28 @@ function MnemoAppInner() {
                 <span className="hm">m</span><span className="hr">nemo</span>
               </div>
               <div className="hero-tag">read faster. retain more. forget nothing.</div>
-              <div className="hero-stats">
-                <div className="hs">
-                  <div className="hs-n">{sessions.length}</div>
-                  <div className="hs-l">sessions</div>
-                </div>
-                <div className="hs">
-                  <div className="hs-n">{totalWordsRead > 999 ? (totalWordsRead / 1000).toFixed(1) + "k" : totalWordsRead}</div>
-                  <div className="hs-l">words read</div>
-                </div>
-                <div className="hs">
-                  <div className="hs-n">{avgWpm || "—"}</div>
-                  <div className="hs-l">avg WPM</div>
-                </div>
-              </div>
+            </div>
+
+            {/* Reading estimate pills — shown at top when text is loaded */}
+            <div className={`est-row${wordCount > 20 ? " vis" : ""}`}>
+              <div className="est-pill"><span className="en">{wordCount.toLocaleString()}</span> words</div>
+              <div className="est-pill">~<span className="en">{estMins}</span> min at {wpm} WPM</div>
+              <div className="est-pill">~<span className="en">{estPages}</span> pages</div>
+            </div>
+
+            {/* WPM selector */}
+            <div className="wpm-intake-row">
+              <label className="wpm-intake-lbl">Reading speed</label>
+              <input
+                type="range"
+                min={100}
+                max={800}
+                step={25}
+                value={wpm}
+                onChange={(e) => updateWpm(Number(e.target.value))}
+                style={{ flex: 1, accentColor: "var(--teal)" }}
+              />
+              <span className="wpm-intake-val">{wpm} wpm</span>
             </div>
 
             {/* Auth */}
@@ -2201,13 +2212,6 @@ function MnemoAppInner() {
               </div>
             )}
 
-            {/* Estimates */}
-            <div className={`est-row${wordCount > 20 ? " vis" : ""}`}>
-              <div className="est-pill"><span className="en">{wordCount.toLocaleString()}</span> words</div>
-              <div className="est-pill">~<span className="en">{estMins}</span> min at {wpm} WPM</div>
-              <div className="est-pill">~<span className="en">{estPages}</span> pages</div>
-            </div>
-
             {/* Focus */}
             <div className="focus-row">
               <div className="focus-lbl">FOCUS INSTRUCTIONS <span style={{ color: "var(--gray3)" }}>(OPTIONAL)</span></div>
@@ -2268,16 +2272,7 @@ function MnemoAppInner() {
               </div>
             ))}
           </div>
-          {schema && (
-            <div className="schema">
-              <div className="schema-lbl">SCHEMA BRIEF — READ THIS FIRST</div>
-              <div className="schema-txt">{schema.summary}</div>
-              <div className="schema-kws">
-                {schema.keywords.map((k, i) => <span key={i} className="kw">{k}</span>)}
-              </div>
-            </div>
-          )}
-          {schema && (
+          {primeDone && (
             <button className="start-btn" onClick={startReading}>
               START READING →
             </button>
@@ -2285,10 +2280,10 @@ function MnemoAppInner() {
         </div>
       )}
 
-      {/* ===== READER ===== */}
-      {(screen === "reader" || screen === "text") && (
-        <>
-          {/* Thick scrubable progress bar — shared across reader + text view */}
+      {/* ===== RSVP READER ===== */}
+      {screen === "reader" && (
+        <div className="reader-screen">
+          {/* Thick scrubable progress bar */}
           <div
             ref={progWrapRef}
             className="prog-wrap"
@@ -2298,12 +2293,6 @@ function MnemoAppInner() {
             <div className="prog-bar" style={{ width: progress + "%" }} />
             <div className="prog-thumb" style={{ left: progress + "%" }} />
           </div>
-        </>
-      )}
-
-      {/* ===== RSVP READER ===== */}
-      {screen === "reader" && (
-        <div className="reader-screen">
           {/* Top row */}
           <div className="reader-top">
             <div className="reader-top-left">
@@ -2487,6 +2476,16 @@ function MnemoAppInner() {
       {/* ===== TEXT VIEW ===== */}
       {screen === "text" && (
         <div className="text-screen">
+          {/* Scrubable progress bar */}
+          <div
+            ref={progWrapRef}
+            className="prog-wrap"
+            onMouseDown={handleProgMouseDown}
+            onTouchStart={handleProgTouchStart}
+          >
+            <div className="prog-bar" style={{ width: progress + "%" }} />
+            <div className="prog-thumb" style={{ left: progress + "%" }} />
+          </div>
           <div className="text-nav">
             <div className="text-nav-left">
               <button className="btn-icon" style={{ width: 34, height: 34, fontSize: 13 }} onClick={togglePause}>

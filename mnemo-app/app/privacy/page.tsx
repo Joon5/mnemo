@@ -89,7 +89,7 @@ export default function PrivacyPage() {
         </h2>
         <p style={{ color: "var(--gray2)" }}>
           Questions? Email us at{" "}
-          <a href="mailto:privacy@mnemo.app" style={{ color: "var(--teal)" }}>privacy@mnemo.app</a>
+          <a href="mailto:mnemo.ai.app@gmail.com" style={{ color: "var(--teal)" }}>mnemo.ai.app@gmail.com</a>
         </p>
       </section>
     </div>

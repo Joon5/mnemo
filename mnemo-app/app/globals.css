@@ -130,8 +130,14 @@ textarea::placeholder { color: var(--gray3); }
 .start-btn { background: var(--teal); color: var(--bg); border: none; border-radius: 10px; font-family: var(--display); font-size: 12px; font-weight: 700; letter-spacing: .06em; padding: 13px 32px; cursor: pointer; transition: opacity .2s; }
 .start-btn:hover { opacity: .88; }
 
+/* INTAKE — WPM row */
+.wpm-intake-row { width: 100%; display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.wpm-intake-lbl { font-size: 11px; color: var(--gray3); white-space: nowrap; min-width: 90px; }
+.wpm-intake-val { font-size: 12px; color: var(--teal); font-weight: 600; min-width: 58px; text-align: right; white-space: nowrap; }
+
 /* READER */
-.reader-screen { flex-direction: column; min-height: 100vh; display: flex; }
+.reader-screen { position: relative; flex-direction: column; min-height: 100vh; display: flex; }
+.text-screen { position: relative; min-height: 100vh; display: flex; flex-direction: column; padding-top: 8px; }
 
 /* Thick scrubable progress bar at top */
 .prog-wrap { position: absolute; top: 0; left: 0; right: 0; height: 8px;
@@ -227,7 +233,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px;
 .toc-bm-meta { font-size: 9px; color: var(--gray3); }
 
 /* Text view */
-.text-screen { display: flex; flex-direction: column; min-height: 100vh; padding-top: 8px; }
 .text-nav { display: flex; align-items: center; justify-content: space-between;
   padding: 12px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; margin-top: 8px; }
 .text-nav-left { display: flex; align-items: center; gap: 10px; }

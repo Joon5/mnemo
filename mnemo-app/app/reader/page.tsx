@@ -14,6 +14,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 type WordRaw = string | [string, number, (0 | 1)?];
 
+interface MneCheck { q: string; o: string[]; c: number; at: number }
+
 interface MneFile {
   v: number;
   id?: string;
@@ -32,7 +34,7 @@ interface MneFile {
   chapters?: { i: number; t: string; s: number; e: number }[];
   words: WordRaw[];
   cards?: { q: string; a: string }[];
-  checks?: { q: string; o: string[]; c: number; at: number }[];
+  checks?: MneCheck[];
 }
 
 interface ParsedWord {
@@ -119,7 +121,7 @@ export default function MneReader() {
   const [error, setError]       = useState("");
 
   // Checkpoint state
-  const [checkQ, setCheckQ]       = useState<MneFile["checks"][0] | null>(null);
+  const [checkQ, setCheckQ]       = useState<MneCheck | null>(null);
   const [checkShuffled, setCheckShuffled] = useState<string[]>([]);
   const [checkResult, setCheckResult]     = useState<"correct"|"wrong"|null>(null);
   const [firedChecks, setFiredChecks]     = useState<Set<number>>(new Set());
