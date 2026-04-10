@@ -71,7 +71,7 @@ const BASE_DELAY = Math.round(((60000 / 350) * 0.8 * 0.7)); // ~196ms
 const WEIGHTED_DELAY = Math.round(BASE_DELAY * 1.3); // 30% longer than base (~255ms)
 const INTRO_DELAY = Math.round(BASE_DELAY * 1.1) + 100; // ~316ms
 
-type Screen = "intake" | "prime" | "reader" | "summary";
+type Screen = "intake" | "prime" | "reader" | "text" | "summary";
 
 // ── Util ──
 function tok(t: string): string[] {
@@ -264,6 +264,8 @@ function MnemoAppInner() {
   const [cursorPct, setCursorPct] = useState(0);
   const [activeBarIdx, setActiveBarIdx] = useState(-1);
   const [chIndLabel, setChIndLabel] = useState("");
+  const [currentWordIdx, setCurrentWordIdx] = useState(0);
+  const [textBuilt, setTextBuilt] = useState(false);
 
   // ── Summary ──
   const [sumWords, setSumWords] = useState(0);
@@ -279,9 +281,6 @@ function MnemoAppInner() {
   const [retNow, setRetNow] = useState("—");
   const [retNote, setRetNote] = useState("");
   const [cpScorePct, setCpScorePct] = useState<number | null>(null);
-
-  // ── Bookmark panel (reader) ──
-  const [bmPanelVisible, setBmPanelVisible] = useState(false);
 
   // ── Bookmark modal ──
   const [bmModalVisible, setBmModalVisible] = useState(false);
@@ -313,6 +312,9 @@ function MnemoAppInner() {
   const isPausedRef = useRef(true);
   const retCanvasRef = useRef<HTMLCanvasElement>(null);
   const wbarRef = useRef<HTMLDivElement>(null);
+  const backClickRef = useRef({ count: 0, timer: null as ReturnType<typeof setTimeout> | null });
+  const progIsScrubbing = useRef(false);
+  const progWrapRef = useRef<HTMLDivElement>(null);
 
   // ── Auth init ──
   useEffect(() => {
@@ -1603,6 +1605,7 @@ function MnemoAppInner() {
 
     const pct = Math.round((i / r.words.length) * 100);
     setProgress(pct);
+    setCurrentWordIdx(i);
 
     // Update cursor position on EVERY word for real-time animation
     const frac = i / r.words.length;
@@ -1842,6 +1845,49 @@ function MnemoAppInner() {
     else displayWord(r.currentIdx);
   }
 
+  function seekTo(idx: number) {
+    const r = readerRef.current;
+    if (r.timer) { clearTimeout(r.timer); r.timer = null; }
+    r.currentIdx = Math.max(0, Math.min(idx, r.words.length - 1));
+    r.tailBuffer = [];
+    setTailContent([]);
+    if (!isPausedRef.current) runReader();
+    else displayWord(r.currentIdx);
+  }
+
+  function handleBack() {
+    const bref = backClickRef.current;
+    bref.count++;
+    if (bref.count >= 2) {
+      if (bref.timer) clearTimeout(bref.timer);
+      bref.count = 0;
+      seekTo(0);
+    } else {
+      bref.timer = setTimeout(() => {
+        bref.count = 0;
+        goBack();
+      }, 400);
+    }
+  }
+
+  function scrubFromX(clientX: number) {
+    const wrap = progWrapRef.current;
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    seekTo(Math.floor(pct * readerRef.current.words.length));
+  }
+
+  function handleProgMouseDown(e: React.MouseEvent) {
+    progIsScrubbing.current = true;
+    scrubFromX(e.clientX);
+  }
+
+  function handleProgTouchStart(e: React.TouchEvent) {
+    e.preventDefault();
+    scrubFromX(e.touches[0].clientX);
+  }
+
   function updateWpm(v: number) {
     readerRef.current.wpm = v;
     setWpm(v);
@@ -1916,20 +1962,39 @@ function MnemoAppInner() {
 
   // ── Keyboard shortcuts (using refs to avoid stale closures) ──
   useEffect(() => {
-    if (screen !== "reader") return;
+    if (screen !== "reader" && screen !== "text") return;
     function onKey(e: KeyboardEvent) {
       if (tocVisible || cpVisible) return;
-      if (e.key === "ArrowUp") setTailVisibility(true);
-      if (e.key === "ArrowDown") setTailVisibility(false);
+      if (screen === "reader") {
+        if (e.key === "ArrowUp") setTailVisibility(true);
+        if (e.key === "ArrowDown") setTailVisibility(false);
+        if (e.key === "ArrowLeft") goBack();
+        if (e.key === "ArrowRight") skipSentence();
+        if (e.key === "t" || e.key === "T") openToc();
+        if (e.key === "Escape") setTocVisible(false);
+      }
       if (e.key === " ") { e.preventDefault(); togglePause(); }
-      if (e.key === "ArrowLeft") goBack();
-      if (e.key === "ArrowRight") skipSentence();
-      if (e.key === "t" || e.key === "T") openToc();
-      if (e.key === "Escape") setTocVisible(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [screen, tocVisible, cpVisible]);
+
+  // ── Progress bar scrub mouse events ──
+  useEffect(() => {
+    if (screen !== "reader" && screen !== "text") return;
+    function onMove(e: MouseEvent) { if (progIsScrubbing.current) scrubFromX(e.clientX); }
+    function onUp() { progIsScrubbing.current = false; }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+  }, [screen]);
+
+  // ── Auto-scroll text view to current word ──
+  useEffect(() => {
+    if (screen !== "text") return;
+    const el = document.getElementById(`tw-${currentWordIdx}`);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [currentWordIdx, screen]);
 
   // Touch swipe
   useEffect(() => {
@@ -2221,23 +2286,34 @@ function MnemoAppInner() {
       )}
 
       {/* ===== READER ===== */}
+      {(screen === "reader" || screen === "text") && (
+        <>
+          {/* Thick scrubable progress bar — shared across reader + text view */}
+          <div
+            ref={progWrapRef}
+            className="prog-wrap"
+            onMouseDown={handleProgMouseDown}
+            onTouchStart={handleProgTouchStart}
+          >
+            <div className="prog-bar" style={{ width: progress + "%" }} />
+            <div className="prog-thumb" style={{ left: progress + "%" }} />
+          </div>
+        </>
+      )}
+
+      {/* ===== RSVP READER ===== */}
       {screen === "reader" && (
         <div className="reader-screen">
-          <div className="hdr">
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div className="logo"><span className="lm">m</span><span className="lr">nemo</span></div>
-              <div className="badge">BETA</div>
+          {/* Top row */}
+          <div className="reader-top">
+            <div className="reader-top-left">
+              <span className="reader-pos">{currentWordIdx} / {readerRef.current.words.length || 0}</span>
+              <button className="mini-btn" onClick={openToc}>☰ TOC</button>
             </div>
-            <div className="hdr-r">{currentChapter || "—"}</div>
-          </div>
-
-          {/* Progress */}
-          <div className="prog-wrap">
-            <span className="wpm-b">{wpm} WPM</span>
-            <div className="prog-tr">
-              <div className="prog-f" style={{ width: progress + "%" }} />
+            <div className="reader-top-right">
+              <button className="mini-btn" onClick={saveBookmark}>Save</button>
+              <button className="mini-btn" onClick={() => { setTextBuilt(false); setScreen("text"); if (!isPausedRef.current) togglePause(); }}>Text view</button>
             </div>
-            <span className="prog-p">{progress}%</span>
           </div>
 
           {/* Stage */}
@@ -2302,11 +2378,7 @@ function MnemoAppInner() {
                       className="wb"
                       style={{
                         height: isCurrent ? Math.max(bar.h, 16) : bar.h,
-                        background: isCurrent
-                          ? "var(--text)"
-                          : isRead
-                          ? bar.c
-                          : bar.c,
+                        background: isCurrent ? "var(--white)" : bar.c,
                         opacity: isRead ? 0.35 : 1,
                         width: Math.max(2, Math.floor(600 / Math.min(weightBars.length, 200))),
                         transition: "height 0.1s ease, opacity 0.15s ease",
@@ -2318,83 +2390,27 @@ function MnemoAppInner() {
             </div>
           </div>
 
-          {/* Controls */}
-          <div className="reader-ctrls">
-            <button
-              className="cb toc-btn"
-              onClick={openToc}
-              style={{ minHeight: 44, minWidth: 44 }}
-            >
-              ☰ TOC
-            </button>
-            <button
-              className="cb"
-              onClick={goBack}
-              style={{ minHeight: 44, minWidth: 44 }}
-            >
-              ◀ BACK
-            </button>
-            <button
-              className={`cb pri`}
-              style={{
-                minHeight: 44,
-                minWidth: 44,
-                ...(isPaused ? { background: "transparent", borderColor: "var(--teal)", color: "var(--teal)" } : {}),
-              }}
-              onClick={togglePause}
-            >
-              {isPaused ? "RESUME" : "PAUSE"}
-            </button>
-            <button
-              className="cb"
-              onClick={skipSentence}
-              style={{ minHeight: 44, minWidth: 44 }}
-            >
-              SKIP ▶
-            </button>
-            <button
-              className="cb sav"
-              onClick={saveBookmark}
-              style={{ minHeight: 44, minWidth: 44 }}
-            >
-              ⊕ SAVE
-            </button>
-            <button
-              className="cb"
-              onClick={() => setBmPanelVisible(true)}
-              style={{ minHeight: 44, minWidth: 44, position: "relative" }}
-              title="Saved sessions"
-            >
-              📌{bookmarks.length > 0 && <span className="bm-badge">{bookmarks.length}</span>}
-            </button>
-            <button
-              className="cb"
-              onClick={exportMnemo}
-              title="Export as .mne"
-              style={{ minHeight: 44, minWidth: 44, fontSize: 11 }}
-            >
-              ↓ .mne
-            </button>
-            <div className="wpm-wrap" style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-              <input
-                type="range"
-                min={150}
-                max={600}
-                step={25}
-                value={wpm}
-                onChange={(e) => updateWpm(Number(e.target.value))}
-                style={{
-                  flex: 1,
-                  height: 8,
-                  cursor: "pointer",
-                  WebkitAppearance: "slider-horizontal",
-                }}
-              />
-              <span className="wpm-v" style={{ minWidth: 44, textAlign: "center" }}>{wpm}</span>
-            </div>
+          {/* WPM slider */}
+          <div className="reader-wpm-row">
+            <input
+              type="range"
+              min={150}
+              max={600}
+              step={25}
+              value={wpm}
+              onChange={(e) => updateWpm(Number(e.target.value))}
+            />
+            <span className="reader-wpm-val">{wpm} wpm</span>
           </div>
 
-          {/* TOC overlay */}
+          {/* Icon controls */}
+          <div className="reader-controls">
+            <button className="btn-icon" title="Prev sentence (double = restart)" onClick={handleBack}>◀</button>
+            <button className="btn-icon btn-pp" onClick={togglePause}>{isPaused ? "▶" : "⏸"}</button>
+            <button className="btn-icon" title="Next sentence" onClick={skipSentence}>▶</button>
+          </div>
+
+          {/* TOC overlay — chapters + saved positions */}
           <div className={`toc-ov${tocVisible ? " vis" : ""}`} onClick={(e) => { if (e.target === e.currentTarget) setTocVisible(false); }}>
             <div className="toc-pan">
               <div className="toc-h">
@@ -2417,40 +2433,26 @@ function MnemoAppInner() {
                   ))
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Bookmark panel overlay */}
-          <div className={`bm-ov${bmPanelVisible ? " vis" : ""}`} onClick={(e) => { if (e.target === e.currentTarget) setBmPanelVisible(false); }}>
-            <div className="bm-pan">
-              <div className="toc-h">
-                <div className="toc-t">SAVED SESSIONS</div>
-                <button className="toc-x" onClick={() => setBmPanelVisible(false)}>✕</button>
-              </div>
-              <div className="toc-items">
-                {bookmarks.length === 0 ? (
-                  <div className="toc-empty">No saved sessions yet. Press ⊕ SAVE while reading to save your position.</div>
-                ) : (
-                  bookmarks.map((bm) => {
-                    const p = Math.round((bm.pos / bm.wc) * 100);
-                    return (
-                      <div key={bm.id} className="bm-pan-item">
-                        <div className="bm-pan-info" onClick={() => { openBookmark(bm.id); setBmPanelVisible(false); }}>
-                          <div className="bm-pan-title">{bm.title}</div>
-                          <div className="bm-meta">{p}% · {bm.wpm} WPM · {timeAgoLocal(bm.at)}</div>
-                          <div className="bm-bar" style={{ marginTop: 6 }}>
+              {bookmarks.length > 0 && (
+                <>
+                  <div className="toc-divider" />
+                  <div className="toc-bm-hdr">SAVED POSITIONS</div>
+                  <div className="toc-items">
+                    {bookmarks.map((bm) => {
+                      const p = Math.round((bm.pos / bm.wc) * 100);
+                      return (
+                        <div key={bm.id} className="toc-bm-item" onClick={() => { openBookmark(bm.id); setTocVisible(false); }}>
+                          <div className="toc-bm-title">{bm.title}</div>
+                          <div className="toc-bm-meta">{p}% · {bm.wpm} WPM</div>
+                          <div className="bm-bar" style={{ marginTop: 4 }}>
                             <div className="bm-bar-f" style={{ width: p + "%" }} />
                           </div>
                         </div>
-                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          <button className="bm-res" onClick={() => { openBookmark(bm.id); setBmPanelVisible(false); }}>JUMP</button>
-                          <button className="bm-del" onClick={() => deleteBookmark(bm.id)}>✕</button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -2478,6 +2480,40 @@ function MnemoAppInner() {
                 CONTINUE READING →
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== TEXT VIEW ===== */}
+      {screen === "text" && (
+        <div className="text-screen">
+          <div className="text-nav">
+            <div className="text-nav-left">
+              <button className="btn-icon" style={{ width: 34, height: 34, fontSize: 13 }} onClick={togglePause}>
+                {isPaused ? "▶" : "⏸"}
+              </button>
+              <span className="text-nav-pos">{currentWordIdx} / {readerRef.current.words.length || 0}</span>
+            </div>
+            <div className="text-nav-right">
+              <button className="mini-btn" onClick={saveBookmark}>Save</button>
+              <button className="mini-btn" onClick={() => setScreen("reader")}>mnemo</button>
+            </div>
+          </div>
+          <div className="text-body">
+            {readerRef.current.words.map((w, i) => {
+              const colorCls = w.color === "green" ? " tc-green" : w.color === "orange" ? " tc-orange" : w.color === "mnemo" ? " tc-mnemo" : "";
+              const isCur = i === currentWordIdx;
+              return (
+                <span
+                  key={i}
+                  id={`tw-${i}`}
+                  className={`tw${colorCls}${isCur ? " cur" : ""}`}
+                  onClick={() => seekTo(i)}
+                >
+                  {w.text}{" "}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
