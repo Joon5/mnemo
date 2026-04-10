@@ -149,7 +149,7 @@ textarea::placeholder { color: var(--gray3); }
 .prog-wrap:hover .prog-thumb { opacity: 1; }
 
 /* Top bar */
-.reader-top { position: absolute; top: 8px; left: 0; right: 0;
+.reader-top { position: absolute; top: 8px; left: 0; right: 0; z-index: 20;
   display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; }
 .reader-top-left { display: flex; align-items: center; gap: 10px; }
 .reader-top-right { display: flex; align-items: center; gap: 8px; }
