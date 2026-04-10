@@ -1230,39 +1230,46 @@ function MnemoAppInner() {
       ? 'DOCUMENT CONTEXT (global themes and key terms — use this to understand what matters across the whole text):\n"""' + docContext + '"""\n\n'
       : '';
 
-    const maxPct = Math.round(wc * 0.06); // 6% budget across the whole chunk
     const greenBudget = Math.max(4, Math.round(wc * 0.10)); // ~10% green
     const numberedWords = chunkWords.map((w, i) => i + ':' + w).join(' ');
     const prompt =
-      'You are a reading comprehension expert helping a speed reader retain key information.\n' +
-      'Return ONLY valid JSON.\n\n' +
-      'TASK: Read the passage below. Identify which words a speed reader MUST see to retain\n' +
-      'the key points. Return ONLY the INDEX NUMBERS of those words.\n\n' +
-      'OUTPUT FORMAT:\n' +
-      '{"green": [3, 7, 12, 31, ...]}\n\n' +
-      'Return a list of INTEGER indices. Aim for ' + greenBudget + ' indices (about 10% of ' + wc + ' words).\n\n' +
-      'CHOOSE indices for any of these:\n' +
-      '  - CLAIM WORDS: the word that IS the finding or conclusion\n' +
-      '    e.g. "collapses", "fragment", "noise", "constraint", "intimidated", "laziness"\n' +
-      '  - KEY CONCEPTS: central ideas the passage argues about\n' +
-      '    e.g. "comprehension", "attention", "cognitive", "adaptive", "semantically-aware"\n' +
-      '  - KEY NAMES: people, tools, publications central to the argument\n' +
-      '    e.g. "Spritz", "BeeLine", "Velocity", "Di", "Nocera", "Atlantic"\n' +
-      '  - CONTRAST WORDS: signal a reversal or surprise\n' +
-      '    e.g. "not", "but", "however", "despite", "instead", "rather", "uniform"\n' +
-      '  - TECHNICAL TERMS: specialist vocabulary\n' +
-      '    e.g. "WPM", "speed-reading", "schema", "encode", "peer-reviewed"\n\n' +
-      'NEVER choose indices for:\n' +
-      '  articles/prepositions: the, a, an, of, in, at, to, for, on, by, as, with, from\n' +
-      '  linking verbs: is, are, was, were, be, been, have, has, had, do, does, did\n' +
-      '  pronouns: it, its, they, their, this, that, these, those, which\n' +
-      '  attribution verbs: found, shows, suggests, argues, states, cited, reports\n' +
-      '  vague qualifiers: major, significant, important, various, broad, real, same\n' +
-      (familiarNote ? '\nSKIP (reader already knows these from earlier): ' + familiarNote + '\n' : '') +
+      'You are a semantic analysis engine for a speed-reading system. Return ONLY valid JSON.\n\n' +
+      'CRITICAL PRINCIPLE: You are NOT building a keyword list. You are reasoning about what\n' +
+      'this specific passage is arguing, then identifying which words are load-bearing for that argument.\n' +
+      'The same word may be essential in one text and irrelevant in another. Importance is relational.\n\n' +
+      'REASONING PIPELINE — execute in this order before selecting any indices:\n\n' +
+      'Step 1 — THESIS: What is the governing argument or core purpose of this passage?\n' +
+      '  Write one sentence that captures what the author is fundamentally claiming or doing.\n\n' +
+      'Step 2 — LOAD-BEARING CLAIMS: What key points are necessary to build, defend, or clarify that thesis?\n' +
+      '  List 2–4 short phrases that name the indispensable supporting structure.\n\n' +
+      'Step 3 — LOSS FUNCTION: For each candidate word, ask:\n' +
+      '  "If a speed reader misses this word, how much of the argument is lost?"\n' +
+      '  Select words that fail this test — words whose omission breaks meaning, distorts the claim,\n' +
+      '  removes a crucial name/term, or drops a pivotal contrast or qualification.\n\n' +
+      'Step 4 — OUTPUT: Return the indices of those words. Aim for ' + greenBudget + ' indices (~10% of ' + wc + ' words).\n\n' +
+      'WHAT TO MARK (only after completing Steps 1–3):\n' +
+      '  - Words that express the thesis or a central claim directly\n' +
+      '  - Hinge words that reverse, qualify, or pivot the argument (e.g. "however", "despite", "unless")\n' +
+      '  - Key names (people, tools, publications) that the argument depends on\n' +
+      '  - Definitions or technical terms that carry meaning unique to this passage\n' +
+      '  - Decisive evidence terms (not all statistics — only those central to the claim)\n\n' +
+      'WHAT NOT TO MARK:\n' +
+      '  - Function words: the, a, an, of, in, at, to, for, on, by, as, with, from, into\n' +
+      '  - Linking verbs: is, are, was, were, be, been, have, has, had, do, does\n' +
+      '  - Generic pronouns: it, its, they, their, this, that, these, those, which\n' +
+      '  - Attribution verbs: found, shows, suggests, argues, states, cited, reports, says\n' +
+      '  - Decorative or peripheral detail that does not affect the argument if omitted\n' +
+      (familiarNote ? '\nSKIP (reader already knows these): ' + familiarNote + '\n' : '') +
       '\n' + (docNote ? 'DOCUMENT CONTEXT: ' + docNote + '\n\n' : '') +
       'PASSAGE:\n' + contextText.slice(0, 4000) + '\n\n' +
-      'INDEXED WORDS (use these numbers as your indices):\n' + numberedWords + '\n\n' +
-      'Return {"green": [...]} with ' + greenBudget + ' integer indices. Only integers, no strings.';
+      'INDEXED WORDS:\n' + numberedWords + '\n\n' +
+      'OUTPUT FORMAT — return exactly this structure:\n' +
+      '{\n' +
+      '  "thesis": "one sentence: the governing argument of this passage",\n' +
+      '  "load_bearing": ["key claim 1", "key claim 2"],\n' +
+      '  "green": [3, 7, 12, 19, ...]\n' +
+      '}\n' +
+      'Only integer indices in "green". No strings. No markdown. Raw JSON only.';
 
     // Written-out numbers that carry quantitative meaning
     const WRITTEN_NUMBERS = new Set([
@@ -2394,17 +2401,16 @@ function MnemoAppInner() {
                 />
                 {weightBars.map((bar, i) => {
                   const isRead = i < activeBarIdx;
-                  const isCurrent = i === activeBarIdx;
                   return (
                     <div
                       key={i}
                       className="wb"
                       style={{
-                        height: isCurrent ? Math.max(bar.h, 16) : bar.h,
-                        background: isCurrent ? "var(--white)" : bar.c,
+                        height: bar.h,
+                        background: bar.c,
                         opacity: isRead ? 0.35 : 1,
                         width: Math.max(2, Math.floor(600 / Math.min(weightBars.length, 200))),
-                        transition: "height 0.1s ease, opacity 0.15s ease",
+                        transition: "opacity 0.15s ease",
                       }}
                     />
                   );
