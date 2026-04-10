@@ -165,8 +165,8 @@ function generateLocalFlashcards(text: string): Flashcard[] {
 }
 
 // Model selection: Haiku for cheap/fast structured tasks, Sonnet for nuanced analysis
-const MODEL_FAST = "llama-3.1-8b-instant";   // checkpoints, simple JSON tasks
-const MODEL_SMART = "llama-3.1-8b-instant";  // semantic weighting, schema, summaries
+const MODEL_FAST = "llama-3.1-8b-instant";        // checkpoints, simple JSON tasks
+const MODEL_SMART = "llama-3.3-70b-versatile";    // semantic weighting, schema, summaries
 
 async function callClaude(
   messages: { role: string; content: string }[],
@@ -1230,59 +1230,68 @@ function MnemoAppInner() {
       : '';
 
     const maxPct = Math.round(wc * 0.06); // 6% budget across the whole chunk
+    const greenBudget = Math.max(2, Math.round(wc * 0.05));
     const prompt =
-      'You are a senior editor annotating text for a speed-reading app. Return ONLY valid JSON.\n\n' +
-      '=== OUTPUT FORMAT (STRICT) ===\n' +
-      'Return exactly this JSON structure:\n' +
-      '{"wordColors": [value, value, ...]}\n\n' +
-      'VALID VALUES — only these three, nothing else:\n' +
-      '  "orange"  → a specific number, statistic, percentage, or coined specialist term\n' +
-      '  "green"   → a load-bearing claim word (the actual finding or contrast, not a description of it)\n' +
-      '  null      → everything else (use JSON null, not the string "null")\n\n' +
-      'The array must have EXACTLY ' + wc + ' values — one per word in order.\n' +
-      'Maximum non-null values allowed: ' + maxPct + ' (about 6% of words).\n\n' +
-      '=== HOW TO SCORE ===\n\n' +
-      'STEP 1: Read the full passage. Identify:\n' +
-      '  - The central argument or thesis\n' +
-      '  - Which 1-3 sentences are LOAD-BEARING (the argument stands on these)\n' +
-      '  - Which sentences are transitional, illustrative, or elaborating\n\n' +
-      'STEP 2: Distribute your ' + maxPct + '-word budget UNEVENLY:\n' +
-      '  - A pivotal sentence can use 3-5 highlights\n' +
-      '  - A transitional or example sentence gets 0\n\n' +
-      'STEP 3: Apply these rules:\n' +
-      '  orange: every specific number/stat/% ("45.0", "0.1%", "2.7 million"). Always orange.\n' +
-      '  orange: coined or specialist term on first use ("optimal recognition point" = both words orange)\n' +
-      '  green: the word that IS the claim ("middle-aged" not "researchers found middle-aged")\n' +
-      '  null: attribution verbs (find, show, suggest, argue, conclude, demonstrate)\n' +
-      '  null: manner adverbs (clearly, explicitly, strongly, directly, importantly)\n' +
-      '  null: all function words (the, a, an, of, in, that, and, or, but, by, to, for)\n' +
-      '  null: vague qualifiers (major, significant, important, various, broad)\n' +
-      '  null: repeated terms already seen earlier in the text\n\n' +
-      (familiarNote ? '=== FAMILIARITY DECAY ===\n' + familiarNote + '\n\n' : '') +
-      '=== EXAMPLE ===\n' +
-      'Text: "The mean founder age for the fastest-growing 0.1% of startups is 45.0 — successful entrepreneurs are middle-aged, not young. This finding has been replicated across datasets."\n' +
-      'Words: The mean founder age for the fastest-growing 0.1% of startups is 45.0 — successful entrepreneurs are middle-aged, not young. This finding has been replicated across datasets.\n' +
-      'Answer: {"wordColors":[null,null,null,null,null,null,null,"orange",null,null,null,"orange",null,null,null,null,null,"green",null,"green",null,null,null,null,null,null,null,null]}\n\n' +
-      (docNote ? '=== DOCUMENT CONTEXT ===\n' + docNote + '\n' : '') +
-      '=== PASSAGE TO SCORE ===\n' +
-      contextText.slice(0, 4000) + '\n\n' +
-      '=== WORDS TO SCORE (' + wc + ' words) ===\n' +
-      wl + '\n\n' +
-      'Return the JSON now. Array must have exactly ' + wc + ' values.';
+      'You are a reading comprehension expert. Return ONLY valid JSON.\n\n' +
+      'TASK: Read the passage below. Identify the words that carry the ARGUMENT — the actual\n' +
+      'claim, finding, or contrast that the author is making. Mark those words "green".\n' +
+      'Everything else must be null.\n\n' +
+      'OUTPUT: {"wordColors": [null, "green", null, ...]}\n' +
+      'Rules:\n' +
+      '  - ONLY two valid values: the string "green" or JSON null\n' +
+      '  - DO NOT use "orange", "black", "blue", or any other value\n' +
+      '  - Array length must be EXACTLY ' + wc + '\n' +
+      '  - Maximum "green" values: ' + greenBudget + '\n' +
+      '  - Most words must be null\n\n' +
+      'HOW TO CHOOSE GREEN WORDS:\n' +
+      '  1. Find the 1-2 sentences that ARE the argument (not examples, not background)\n' +
+      '  2. In those sentences, mark the word(s) that state the finding or contrast\n' +
+      '  3. "collapses", "fragment", "intimidated", "comprehension" can be green\n' +
+      '  4. "the", "a", "is", "are", "was", "found", "shows", "suggests" are ALWAYS null\n' +
+      '  5. Generic nouns like "students", "researchers", "study", "evidence" are null\n\n' +
+      (familiarNote ? 'SKIP THESE (already seen): ' + familiarNote + '\n\n' : '') +
+      (docNote ? 'DOCUMENT CONTEXT: ' + docNote + '\n\n' : '') +
+      'PASSAGE:\n' + contextText.slice(0, 4000) + '\n\n' +
+      'SCORE THESE ' + wc + ' WORDS (in order):\n' + wl + '\n\n' +
+      'Return {"wordColors":[...]} with exactly ' + wc + ' values.';
 
-    // Use Sonnet for semantic weighting — requires deep language understanding
+    // ── Pass 1: Regex pre-pass — numbers/stats are always orange, deterministically ──
+    // AI models are unreliable at number detection. Regex guarantees it.
+    const regexColors: (string | null)[] = chunkWords.map(w => {
+      const clean = w.replace(/^["""'''([\-–—]+|["""''').!?,;:\]]+$/g, "");
+      // Standalone number, decimal, percentage, ratio, year, or measurement
+      if (/^\d{1,3}(,\d{3})*(\.\d+)?[%xX]?$/.test(clean)) return "orange";
+      if (/^\d+(\.\d+)?[%xX]$/.test(clean)) return "orange";
+      if (/^\d{4}$/.test(clean)) return "orange";       // years
+      if (/^\d+[kKmMbBtT]$/.test(clean)) return "orange"; // 2k, 5M, etc.
+      return null;
+    });
+
+    // ── Pass 2: AI weighting — finds green claim words, may also add orange ──
     const raw = await callClaude([{ role: "user", content: prompt }], 3000, MODEL_SMART);
-    if (!raw) return new Array(wc).fill(null);
 
-    try {
-      const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-      const colors = parsed.wordColors || [];
-      if (colors.length === wc) return colors;
-      if (colors.length > wc) return colors.slice(0, wc);
-      return [...colors, ...new Array(wc - colors.length).fill(null)];
-    } catch {
-      return new Array(wc).fill(null);
+    let aiColors: (string | null)[] = new Array(wc).fill(null);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+        // Accept "wordColors" or "words" as the key (models sometimes vary)
+        const arr = parsed.wordColors || parsed.words || parsed.colors || [];
+        // AI only returns green or null — reject any other value
+        const sanitized = arr.map((v: unknown) => v === "green" ? "green" : null);
+        if (sanitized.length >= wc) {
+          aiColors = sanitized.slice(0, wc);
+        } else {
+          aiColors = [...sanitized, ...new Array(wc - sanitized.length).fill(null)];
+        }
+      } catch { /* aiColors stays all-null */ }
     }
+
+    // ── Merge: regex owns orange (numbers), AI owns green (claim words) ──
+    return chunkWords.map((_, i) => {
+      if (regexColors[i] === "orange") return "orange";  // numbers always orange
+      if (aiColors[i] === "green") return "green";       // AI claim words
+      return null;
+    });
   }
 
   // ── Priming ──
