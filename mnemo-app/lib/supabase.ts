@@ -5,9 +5,29 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export type TrainingPassage = {
+  id: string;
+  created_at: string;
+  passage_text: string;
+  word_count: number;
+  doc_context: string | null;
+  model_output: { thesis: string; load_bearing: string[]; green: number[] } | null;
+  green_words: string[];
+  sonnet_output: { thesis: string; load_bearing: string[]; green: number[] } | null;
+  sonnet_green_words: string[];
+  human_reviewed: boolean;
+  human_corrections: { green: number[]; notes: string; was_corrected: boolean } | null;
+  approved: boolean;
+  final_output: { thesis: string; load_bearing: string[]; green: number[] } | null;
+};
+
 export type Database = {
   public: {
     Tables: {
+      training_passages: {
+        Row: TrainingPassage;
+        Insert: Omit<TrainingPassage, 'id' | 'created_at'>;
+      };
       reading_sessions: {
         Row: {
           id: string;

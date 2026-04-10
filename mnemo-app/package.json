@@ -5,7 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "relabel": "tsx scripts/relabel-with-sonnet.ts",
+    "export-review": "tsx scripts/export-for-review.ts",
+    "import-review": "tsx scripts/import-review.ts",
+    "prepare-jsonl": "tsx scripts/prepare-training-jsonl.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
@@ -16,12 +20,14 @@
     "react-dom": "^18"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

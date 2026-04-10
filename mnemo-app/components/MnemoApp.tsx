@@ -1345,6 +1345,28 @@ function MnemoAppInner() {
             }
           }
         }
+
+        // ── Collect training data (fire-and-forget, never blocks reading) ──
+        const rawGreen: number[] = (parsed.green || []).filter(
+          (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0 && x < wc
+        );
+        if (rawGreen.length > 0) {
+          fetch("/api/training", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              passage_text: chunkWords.join(" "),
+              word_count: wc,
+              doc_context: docContext ? docContext.slice(0, 500) : "",
+              model_output: {
+                thesis: parsed.thesis || "",
+                load_bearing: parsed.load_bearing || [],
+                green: rawGreen,
+              },
+              green_words: rawGreen.map((i: number) => chunkWords[i]),
+            }),
+          }).catch(() => {}); // silent fail — never surface to user
+        }
       } catch { /* aiColors stays all-null */ }
     }
 
