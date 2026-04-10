@@ -68,7 +68,8 @@ class ErrorBoundary extends React.Component<
 
 // ── Timing constants (matches original spec) ──
 const BASE_DELAY = Math.round(((60000 / 350) * 0.8 * 0.7)); // ~196ms
-const WEIGHTED_DELAY = Math.round(BASE_DELAY * 1.3); // 30% longer than base (~255ms)
+const WEIGHTED_DELAY = Math.round(BASE_DELAY * 1.2);   // sentence endings: 20% longer
+const HIGHLIGHT_DELAY = Math.round(BASE_DELAY * 1.4);  // key words: 40% longer — reader absorbs the important word
 const INTRO_DELAY = Math.round(BASE_DELAY * 1.1) + 100; // ~316ms
 
 type Screen = "intake" | "prime" | "reader" | "text" | "summary";
@@ -889,7 +890,7 @@ function MnemoAppInner() {
               text:  w[0] as string,
               color,
               pause,
-              delay: (color || pause) ? WEIGHTED_DELAY : BASE_DELAY,
+              delay: color ? HIGHLIGHT_DELAY : pause ? WEIGHTED_DELAY : BASE_DELAY,
             };
           }
         );
@@ -1230,67 +1231,102 @@ function MnemoAppInner() {
       : '';
 
     const maxPct = Math.round(wc * 0.06); // 6% budget across the whole chunk
-    const greenBudget = Math.max(2, Math.round(wc * 0.05));
-    // Number each word explicitly so the model maps to the correct position
+    const greenBudget = Math.max(4, Math.round(wc * 0.10)); // ~10% green
     const numberedWords = chunkWords.map((w, i) => i + ':' + w).join(' ');
     const prompt =
-      'You are a reading comprehension expert. Return ONLY valid JSON.\n\n' +
-      'TASK: Read the passage. Find the words that carry the ARGUMENT — the actual claim,\n' +
-      'finding, or contrast. Return their positions as "green". Everything else is null.\n\n' +
+      'You are a reading comprehension expert helping a speed reader retain key information.\n' +
+      'Return ONLY valid JSON.\n\n' +
+      'TASK: Read the passage below. Identify which words a speed reader MUST see to retain\n' +
+      'the key points. Return ONLY the INDEX NUMBERS of those words.\n\n' +
       'OUTPUT FORMAT:\n' +
-      '{"wordColors": [null, "green", null, ...]}\n\n' +
-      'STRICT RULES:\n' +
-      '  - Each word is listed as INDEX:word below. Use the index to identify position.\n' +
-      '  - Array must have EXACTLY ' + wc + ' entries (index 0 through ' + (wc - 1) + ')\n' +
-      '  - Only two valid values: the string "green" or JSON null\n' +
-      '  - Maximum "green" entries: ' + greenBudget + '\n' +
-      '  - DO NOT use "orange", "black", or any other string\n\n' +
-      'WHAT MAKES A WORD GREEN:\n' +
-      '  - It IS the claim itself, not a description of the claim\n' +
-      '  - It appears in a LOAD-BEARING sentence (remove it and the argument falls apart)\n' +
-      '  - Examples of correct green words: "collapses", "fragment", "comprehension",\n' +
-      '    "noise", "adaptive", "intimidated", "constraint"\n\n' +
-      'ALWAYS NULL — NO EXCEPTIONS:\n' +
-      '  - All function words: the, a, an, of, in, at, to, for, on, by, as, that, which,\n' +
-      '    this, these, those, it, its, and, or, but, not, with, from, is, are, was, were,\n' +
-      '    be, been, have, has, had, do, does, did, will, would, could, should, may, might\n' +
-      '  - Attribution: found, shows, suggests, argues, states, notes, reports, says\n' +
-      '  - Adverbs: clearly, explicitly, simply, directly, notably, already, just\n' +
-      '  - Qualifiers: major, significant, important, various, broad, key, real, certain\n' +
-      '  - Generic nouns: students, researchers, study, research, evidence, results, data\n' +
-      (familiarNote ? '\nSKIP (already seen earlier): ' + familiarNote + '\n' : '') +
+      '{"green": [3, 7, 12, 31, ...]}\n\n' +
+      'Return a list of INTEGER indices. Aim for ' + greenBudget + ' indices (about 10% of ' + wc + ' words).\n\n' +
+      'CHOOSE indices for any of these:\n' +
+      '  - CLAIM WORDS: the word that IS the finding or conclusion\n' +
+      '    e.g. "collapses", "fragment", "noise", "constraint", "intimidated", "laziness"\n' +
+      '  - KEY CONCEPTS: central ideas the passage argues about\n' +
+      '    e.g. "comprehension", "attention", "cognitive", "adaptive", "semantically-aware"\n' +
+      '  - KEY NAMES: people, tools, publications central to the argument\n' +
+      '    e.g. "Spritz", "BeeLine", "Velocity", "Di", "Nocera", "Atlantic"\n' +
+      '  - CONTRAST WORDS: signal a reversal or surprise\n' +
+      '    e.g. "not", "but", "however", "despite", "instead", "rather", "uniform"\n' +
+      '  - TECHNICAL TERMS: specialist vocabulary\n' +
+      '    e.g. "WPM", "speed-reading", "schema", "encode", "peer-reviewed"\n\n' +
+      'NEVER choose indices for:\n' +
+      '  articles/prepositions: the, a, an, of, in, at, to, for, on, by, as, with, from\n' +
+      '  linking verbs: is, are, was, were, be, been, have, has, had, do, does, did\n' +
+      '  pronouns: it, its, they, their, this, that, these, those, which\n' +
+      '  attribution verbs: found, shows, suggests, argues, states, cited, reports\n' +
+      '  vague qualifiers: major, significant, important, various, broad, real, same\n' +
+      (familiarNote ? '\nSKIP (reader already knows these from earlier): ' + familiarNote + '\n' : '') +
       '\n' + (docNote ? 'DOCUMENT CONTEXT: ' + docNote + '\n\n' : '') +
       'PASSAGE:\n' + contextText.slice(0, 4000) + '\n\n' +
-      'INDEXED WORDS TO SCORE:\n' + numberedWords + '\n\n' +
-      'Return {"wordColors":[...]} with exactly ' + wc + ' entries (index 0 to ' + (wc - 1) + ').';
+      'INDEXED WORDS (use these numbers as your indices):\n' + numberedWords + '\n\n' +
+      'Return {"green": [...]} with ' + greenBudget + ' integer indices. Only integers, no strings.';
 
-    // ── Pass 1: Regex pre-pass — numbers/stats are always orange, deterministically ──
-    // AI models are unreliable at number detection. Regex guarantees it.
+    // Written-out numbers that carry quantitative meaning
+    const WRITTEN_NUMBERS = new Set([
+      "zero","one","two","three","four","five","six","seven","eight","nine","ten",
+      "eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen",
+      "twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety",
+      "hundred","thousand","million","billion","trillion","half","quarter","third","double","triple",
+    ]);
+
+    // ── Pass 1: Regex pre-pass — statistics always orange, years never orange ──
     const regexColors: (string | null)[] = chunkWords.map(w => {
       const clean = w.replace(/^["""'''([\-–—]+|["""''').!?,;:\]]+$/g, "");
-      // Standalone number, decimal, percentage, ratio, year, or measurement
-      if (/^\d{1,3}(,\d{3})*(\.\d+)?[%xX]?$/.test(clean)) return "orange";
+      const num = Number(clean.replace(/,/g, ""));
+
+      // Exclude years — study dates are noise, not data
+      if (/^\d{4}$/.test(clean) && num >= 1800 && num <= 2100) return null;
+
+      // Percentages and ratios always orange (e.g. 0.1%, 2.5x, 80%)
       if (/^\d+(\.\d+)?[%xX]$/.test(clean)) return "orange";
-      if (/^\d{4}$/.test(clean)) return "orange";       // years
-      if (/^\d+[kKmMbBtT]$/.test(clean)) return "orange"; // 2k, 5M, etc.
+      // Numbers with commas (e.g. 2,400) or decimals (e.g. 45.0)
+      if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(clean)) return "orange";
+      if (/^\d+\.\d+$/.test(clean)) return "orange";
+      // Plain integers that are meaningful quantities (not years)
+      if (/^\d+$/.test(clean) && num > 0) return "orange";
+      // Shorthand: 2k, 5M, 3B
+      if (/^\d+(\.\d+)?[kKmMbBtT]$/.test(clean)) return "orange";
+
+      // Written-out numbers in lowercase (e.g. "three seconds", "thirty percent")
+      if (WRITTEN_NUMBERS.has(w.toLowerCase())) return "orange";
+
       return null;
     });
 
     // ── Pass 2: AI weighting — finds green claim words, may also add orange ──
     const raw = await callClaude([{ role: "user", content: prompt }], 3000, MODEL_SMART);
 
-    let aiColors: (string | null)[] = new Array(wc).fill(null);
+    // Words that are NEVER green regardless of what the model returns
+    const NEVER_GREEN = new Set([
+      "the","a","an","of","in","at","to","for","on","by","as","with","from","into","onto","upon",
+      "is","are","was","were","be","been","being","have","has","had","do","does","did",
+      "will","would","could","should","may","might","must","shall","ought",
+      "it","its","they","their","them","he","she","we","our","you","your","i","my","me",
+      "this","that","these","those","which","what","who","whom","whose",
+      "and","or","nor","but","so","yet","both","either","neither",
+      "every","each","all","any","some","such","no","not",
+      "than","then","when","where","while","if","though","although","because","since","until","unless",
+      "found","shows","show","suggests","suggest","argues","argue","states","state","cited","reports","says","said",
+      "just","very","quite","rather","already","still","also","too","even","only","here","there",
+    ]);
+
+    const aiColors: (string | null)[] = new Array(wc).fill(null);
     if (raw) {
       try {
         const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-        // Accept "wordColors" or "words" as the key (models sometimes vary)
-        const arr = parsed.wordColors || parsed.words || parsed.colors || [];
-        // AI only returns green or null — reject any other value
-        const sanitized = arr.map((v: unknown) => v === "green" ? "green" : null);
-        if (sanitized.length >= wc) {
-          aiColors = sanitized.slice(0, wc);
-        } else {
-          aiColors = [...sanitized, ...new Array(wc - sanitized.length).fill(null)];
+        // Format: {"green": [3, 7, 12, ...]} — just the indices
+        const indices: unknown[] = parsed.green || parsed.indices || parsed.green_indices || [];
+        for (const idx of indices) {
+          const i = Number(idx);
+          if (Number.isInteger(i) && i >= 0 && i < wc) {
+            const bare = chunkWords[i].toLowerCase().replace(/[^a-z]/g, "");
+            if (!NEVER_GREEN.has(bare)) {
+              aiColors[i] = "green";
+            }
+          }
         }
       } catch { /* aiColors stays all-null */ }
     }
@@ -1516,17 +1552,19 @@ function MnemoAppInner() {
           if (colorCount > hardCap) color = null;
         }
       }
-      const isWeighted = color === "green" || color === "orange";
+      const isHighlighted = color === "green" || color === "orange";
       const isSentEnd = /[.!?]["']?$/.test(w);
       return {
         text: w,
         color,
-        pause: isWeighted || isSentEnd,
+        pause: isHighlighted || isSentEnd,
         delay:
           i === 0
             ? INTRO_DELAY
-            : isWeighted || isSentEnd
-            ? WEIGHTED_DELAY
+            : isHighlighted
+            ? HIGHLIGHT_DELAY   // key words: 40% longer — lets reader absorb the important word
+            : isSentEnd
+            ? WEIGHTED_DELAY    // sentence endings: 20% longer
             : BASE_DELAY,
       };
     });
