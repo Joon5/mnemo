@@ -165,8 +165,8 @@ function generateLocalFlashcards(text: string): Flashcard[] {
 }
 
 // Model selection: Haiku for cheap/fast structured tasks, Sonnet for nuanced analysis
-const MODEL_FAST = "claude-haiku-4-5-20251001";   // checkpoints, simple JSON tasks
-const MODEL_SMART = "claude-sonnet-4-20250514";    // semantic weighting, schema, summaries
+const MODEL_FAST = "llama-3.1-8b-instant";   // checkpoints, simple JSON tasks
+const MODEL_SMART = "llama-3.1-8b-instant";  // semantic weighting, schema, summaries
 
 async function callClaude(
   messages: { role: string; content: string }[],
@@ -195,7 +195,8 @@ async function callClaude(
         return "";
       }
       const data = await res.json();
-      return data.content?.map((c: { text?: string }) => c.text || "").join("") || "";
+      // Groq returns OpenAI-compatible format: choices[0].message.content
+      return data.choices?.[0]?.message?.content || "";
     } catch (e) {
       console.error("callClaude error (attempt " + (attempt + 1) + "):", e);
       if (attempt < retries) {
@@ -2307,11 +2308,6 @@ function MnemoAppInner() {
 
           {/* Stage */}
           <div className="reader-stage">
-            <div className={`swipe-hint${tailVisible ? " hid" : ""}`}>
-              <span className="bob">↑</span>
-              <span>SWIPE FOR CONTEXT</span>
-            </div>
-
             {/* Semantic tail */}
             <div className={`sem-tail${tailVisible ? " vis" : ""}`}>
               {tailContent.map((t, i) => (

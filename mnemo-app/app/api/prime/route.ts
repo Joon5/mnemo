@@ -7,116 +7,88 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-export async function OPTIONS(req: NextRequest) {
+// System prompt injected server-side for every request.
+// Ensures Llama 3.1 stays in strict JSON mode regardless of user input.
+const SYSTEM_PROMPT =
+  'You are a precision text annotation engine built into a speed-reading application. ' +
+  'You output ONLY valid JSON. No markdown fences, no explanation, no commentary, no apology. ' +
+  'Raw JSON only. Every response must be parseable by JSON.parse() with no preprocessing.';
+
+export async function OPTIONS() {
   return NextResponse.json({}, { headers: CORS_HEADERS });
 }
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 10 requests per minute per IP
+  // Rate limiting: 20 requests per minute per IP
   const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
   const rateLimitResult = rateLimit(ip, 20, 60000);
 
   if (!rateLimitResult.success) {
     return NextResponse.json(
-      {
-        error: 'Rate limit exceeded',
-        code: 'RATE_LIMIT_EXCEEDED',
-        retryAfter: 60,
-      },
-      {
-        status: 429,
-        headers: {
-          'Retry-After': '60',
-          ...CORS_HEADERS,
-        },
-      }
+      { error: 'Rate limit exceeded', code: 'RATE_LIMIT_EXCEEDED', retryAfter: 60 },
+      { status: 429, headers: { 'Retry-After': '60', ...CORS_HEADERS } }
     );
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
-  if (!apiKey || apiKey === 'YOUR_ANTHROPIC_API_KEY_HERE') {
+  if (!apiKey) {
     return NextResponse.json(
-      {
-        error: 'ANTHROPIC_API_KEY not configured. Add it to .env.local',
-        code: 'API_KEY_MISSING',
-      },
-      {
-        status: 503,
-        headers: CORS_HEADERS,
-      }
+      { error: 'GROQ_API_KEY not configured. Add it to .env.local and Vercel env vars.', code: 'API_KEY_MISSING' },
+      { status: 503, headers: CORS_HEADERS }
     );
   }
 
   try {
     const body = await req.json();
 
-    // Request validation
     if (!body.messages || !Array.isArray(body.messages)) {
       return NextResponse.json(
-        {
-          error: 'Invalid request: messages array is required',
-          code: 'INVALID_REQUEST',
-        },
-        {
-          status: 400,
-          headers: CORS_HEADERS,
-        }
+        { error: 'Invalid request: messages array is required', code: 'INVALID_REQUEST' },
+        { status: 400, headers: CORS_HEADERS }
       );
     }
 
-    if (!body.max_tokens || typeof body.max_tokens !== 'number') {
-      return NextResponse.json(
-        {
-          error: 'Invalid request: max_tokens is required and must be a number',
-          code: 'INVALID_REQUEST',
-        },
-        {
-          status: 400,
-          headers: CORS_HEADERS,
-        }
-      );
-    }
+    // Prepend system message — Llama 3.1 uses this to stay in strict JSON mode
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...body.messages,
+    ];
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const groqBody: Record<string, unknown> = {
+      model: 'llama-3.1-8b-instant',
+      messages,
+      max_tokens: body.max_tokens || 1000,
+      temperature: 0.1,   // Low = consistent, predictable JSON structure
+      response_format: { type: 'json_object' }, // Groq enforces valid JSON at the token level
+    };
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(groqBody),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
+      console.error('Groq API error:', data);
       return NextResponse.json(
-        {
-          ...data,
-          code: data.error?.type || 'API_ERROR',
-        },
-        {
-          status: response.status,
-          headers: CORS_HEADERS,
-        }
+        { error: data.error?.message || 'Groq API error', code: data.error?.type || 'API_ERROR' },
+        { status: response.status, headers: CORS_HEADERS }
       );
     }
 
+    // Return Groq's OpenAI-format response directly
     return NextResponse.json(data, { headers: CORS_HEADERS });
   } catch (err) {
     console.error('API proxy error:', err);
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      {
-        error: 'Proxy error',
-        code: 'PROXY_ERROR',
-        details: errorMessage,
-      },
-      {
-        status: 500,
-        headers: CORS_HEADERS,
-      }
+      { error: 'Proxy error', code: 'PROXY_ERROR', details: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500, headers: CORS_HEADERS }
     );
   }
 }
