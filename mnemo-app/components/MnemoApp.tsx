@@ -1231,29 +1231,38 @@ function MnemoAppInner() {
 
     const maxPct = Math.round(wc * 0.06); // 6% budget across the whole chunk
     const greenBudget = Math.max(2, Math.round(wc * 0.05));
+    // Number each word explicitly so the model maps to the correct position
+    const numberedWords = chunkWords.map((w, i) => i + ':' + w).join(' ');
     const prompt =
       'You are a reading comprehension expert. Return ONLY valid JSON.\n\n' +
-      'TASK: Read the passage below. Identify the words that carry the ARGUMENT — the actual\n' +
-      'claim, finding, or contrast that the author is making. Mark those words "green".\n' +
-      'Everything else must be null.\n\n' +
-      'OUTPUT: {"wordColors": [null, "green", null, ...]}\n' +
-      'Rules:\n' +
-      '  - ONLY two valid values: the string "green" or JSON null\n' +
-      '  - DO NOT use "orange", "black", "blue", or any other value\n' +
-      '  - Array length must be EXACTLY ' + wc + '\n' +
-      '  - Maximum "green" values: ' + greenBudget + '\n' +
-      '  - Most words must be null\n\n' +
-      'HOW TO CHOOSE GREEN WORDS:\n' +
-      '  1. Find the 1-2 sentences that ARE the argument (not examples, not background)\n' +
-      '  2. In those sentences, mark the word(s) that state the finding or contrast\n' +
-      '  3. "collapses", "fragment", "intimidated", "comprehension" can be green\n' +
-      '  4. "the", "a", "is", "are", "was", "found", "shows", "suggests" are ALWAYS null\n' +
-      '  5. Generic nouns like "students", "researchers", "study", "evidence" are null\n\n' +
-      (familiarNote ? 'SKIP THESE (already seen): ' + familiarNote + '\n\n' : '') +
-      (docNote ? 'DOCUMENT CONTEXT: ' + docNote + '\n\n' : '') +
+      'TASK: Read the passage. Find the words that carry the ARGUMENT — the actual claim,\n' +
+      'finding, or contrast. Return their positions as "green". Everything else is null.\n\n' +
+      'OUTPUT FORMAT:\n' +
+      '{"wordColors": [null, "green", null, ...]}\n\n' +
+      'STRICT RULES:\n' +
+      '  - Each word is listed as INDEX:word below. Use the index to identify position.\n' +
+      '  - Array must have EXACTLY ' + wc + ' entries (index 0 through ' + (wc - 1) + ')\n' +
+      '  - Only two valid values: the string "green" or JSON null\n' +
+      '  - Maximum "green" entries: ' + greenBudget + '\n' +
+      '  - DO NOT use "orange", "black", or any other string\n\n' +
+      'WHAT MAKES A WORD GREEN:\n' +
+      '  - It IS the claim itself, not a description of the claim\n' +
+      '  - It appears in a LOAD-BEARING sentence (remove it and the argument falls apart)\n' +
+      '  - Examples of correct green words: "collapses", "fragment", "comprehension",\n' +
+      '    "noise", "adaptive", "intimidated", "constraint"\n\n' +
+      'ALWAYS NULL — NO EXCEPTIONS:\n' +
+      '  - All function words: the, a, an, of, in, at, to, for, on, by, as, that, which,\n' +
+      '    this, these, those, it, its, and, or, but, not, with, from, is, are, was, were,\n' +
+      '    be, been, have, has, had, do, does, did, will, would, could, should, may, might\n' +
+      '  - Attribution: found, shows, suggests, argues, states, notes, reports, says\n' +
+      '  - Adverbs: clearly, explicitly, simply, directly, notably, already, just\n' +
+      '  - Qualifiers: major, significant, important, various, broad, key, real, certain\n' +
+      '  - Generic nouns: students, researchers, study, research, evidence, results, data\n' +
+      (familiarNote ? '\nSKIP (already seen earlier): ' + familiarNote + '\n' : '') +
+      '\n' + (docNote ? 'DOCUMENT CONTEXT: ' + docNote + '\n\n' : '') +
       'PASSAGE:\n' + contextText.slice(0, 4000) + '\n\n' +
-      'SCORE THESE ' + wc + ' WORDS (in order):\n' + wl + '\n\n' +
-      'Return {"wordColors":[...]} with exactly ' + wc + ' values.';
+      'INDEXED WORDS TO SCORE:\n' + numberedWords + '\n\n' +
+      'Return {"wordColors":[...]} with exactly ' + wc + ' entries (index 0 to ' + (wc - 1) + ').';
 
     // ── Pass 1: Regex pre-pass — numbers/stats are always orange, deterministically ──
     // AI models are unreliable at number detection. Regex guarantees it.
