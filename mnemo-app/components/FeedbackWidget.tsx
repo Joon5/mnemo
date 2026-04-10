@@ -68,6 +68,12 @@ function ScaleRating({ value, onChange, label }: { value: number | null; onChang
   );
 }
 
+const HIGHLIGHT_SUGGESTIONS = [
+  "The conclusion was barely highlighted",
+  "Too many examples highlighted, not enough main claims",
+  "'However' / 'but' / 'despite' were ignored but changed the meaning",
+];
+
 export default function FeedbackWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [feedbackType, setFeedbackType] = useState<FeedbackType>('general');
@@ -80,6 +86,15 @@ export default function FeedbackWidget() {
   const [mnemoRating, setMnemoRating] = useState<number | null>(null);
   const [withRating, setWithRating] = useState<number | null>(null);
   const [beforeRating, setBeforeRating] = useState<number | null>(null);
+  const [highlightRating, setHighlightRating] = useState<number | null>(null);
+  const [highlightFeedback, setHighlightFeedback] = useState('');
+
+  function appendSuggestion(s: string) {
+    setHighlightFeedback((prev) => {
+      const trimmed = prev.trim();
+      return trimmed ? `${trimmed}. ${s}` : s;
+    });
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +113,8 @@ export default function FeedbackWidget() {
         mnemo_rating: mnemoRating,
         comprehension_with_mnemo: withRating,
         comprehension_before_mnemo: beforeRating,
+        highlight_accuracy_rating: highlightRating,
+        highlight_feedback_text: highlightFeedback.trim() || null,
         created_at: new Date().toISOString(),
       });
       if (error) { console.error('Feedback error:', error); alert('Failed to submit. Please try again.'); return; }
@@ -111,6 +128,8 @@ export default function FeedbackWidget() {
         setMnemoRating(null);
         setWithRating(null);
         setBeforeRating(null);
+        setHighlightRating(null);
+        setHighlightFeedback('');
       }, 2000);
     } catch (err) {
       console.error('Feedback error:', err);
@@ -144,6 +163,29 @@ export default function FeedbackWidget() {
                 <StarRating value={mnemoRating} onChange={setMnemoRating} label="Rate mnemo overall (1–5)" />
                 <ScaleRating value={withRating} onChange={setWithRating} label="Comprehension speed &amp; retention — with mnemo" />
                 <ScaleRating value={beforeRating} onChange={setBeforeRating} label="Comprehension speed &amp; retention — before mnemo" />
+
+                {/* Highlight accuracy */}
+                <StarRating value={highlightRating} onChange={setHighlightRating} label="Did the highlights feel accurate?" />
+                <div className="feedback-field">
+                  <label className="feedback-label">If not, describe briefly.</label>
+                  <div className="highlight-suggestions">
+                    {HIGHLIGHT_SUGGESTIONS.map((s) => (
+                      <button key={s} type="button" className="highlight-chip"
+                        onClick={() => appendSuggestion(s)} disabled={isSubmitting}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={highlightFeedback}
+                    onChange={(e) => setHighlightFeedback(e.target.value)}
+                    placeholder="Describe what felt off..."
+                    className="feedback-textarea"
+                    style={{ minHeight: 60 }}
+                    disabled={isSubmitting}
+                    maxLength={500}
+                  />
+                </div>
 
                 <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
 
@@ -247,6 +289,10 @@ export default function FeedbackWidget() {
         .feedback-submit { background: var(--teal); color: var(--bg); border: none; border-radius: 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 11px 24px; cursor: pointer; transition: opacity .2s; margin-top: 4px; }
         .feedback-submit:hover:not(:disabled) { opacity: .88; }
         .feedback-submit:disabled { opacity: .5; cursor: not-allowed; }
+        .highlight-suggestions { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+        .highlight-chip { background: var(--card2); border: 1px solid var(--border); border-radius: 6px; color: var(--gray3); font-family: var(--ui); font-size: 11px; padding: 6px 10px; cursor: pointer; text-align: left; transition: border-color .15s, color .15s; }
+        .highlight-chip:hover:not(:disabled) { border-color: var(--teal); color: var(--gray2); }
+        .highlight-chip:disabled { opacity: .4; cursor: not-allowed; }
       `}</style>
     </>
   );
