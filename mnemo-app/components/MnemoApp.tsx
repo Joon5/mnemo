@@ -68,6 +68,7 @@ class ErrorBoundary extends React.Component<
 
 // ── Timing constants (matches original spec) ──
 const BASE_DELAY = Math.round(((60000 / 350) * 0.8 * 0.7)); // ~196ms
+const PUNCT_DELAY = Math.round(BASE_DELAY * 1.1);      // mid-sentence punctuation (, ; : —): 10% longer
 const WEIGHTED_DELAY = Math.round(BASE_DELAY * 1.2);   // sentence endings: 20% longer
 const HIGHLIGHT_DELAY = Math.round(BASE_DELAY * 1.4);  // key words: 40% longer — reader absorbs the important word
 const INTRO_DELAY = Math.round(BASE_DELAY * 1.1) + 100; // ~316ms
@@ -242,6 +243,7 @@ function MnemoAppInner() {
   const [primeDone, setPrimeDone] = useState(false);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [checkpointsEnabled, setCheckpointsEnabled] = useState(true);
 
   // ── Reader display state (triggers re-renders) ──
   const [wordBefore, setWordBefore] = useState("");
@@ -1431,12 +1433,13 @@ function MnemoAppInner() {
     // Initialize words with basic timing
     const initWords: WordData[] = rawWords.map((w, i) => {
       const isSentEnd = /[.!?]["']?$/.test(w);
+      const isPunct   = !isSentEnd && /[,;:\u2014\u2013]$/.test(w); // , ; : — –
       const isMnemo = /^mnemo/i.test(w.replace(/[^a-zA-Z]/g, ""));
       return {
         text: w,
         color: isMnemo ? "mnemo" : null,
         pause: isSentEnd,
-        delay: i === 0 ? INTRO_DELAY : isSentEnd ? WEIGHTED_DELAY : BASE_DELAY,
+        delay: i === 0 ? INTRO_DELAY : isSentEnd ? WEIGHTED_DELAY : isPunct ? PUNCT_DELAY : BASE_DELAY,
       };
     });
     readerRef.current.words = initWords;
@@ -1593,6 +1596,7 @@ function MnemoAppInner() {
       }
       const isHighlighted = color === "green" || color === "orange";
       const isSentEnd = /[.!?]["']?$/.test(w);
+      const isPunct   = !isSentEnd && /[,;:\u2014\u2013]$/.test(w); // , ; : — –
       return {
         text: w,
         color,
@@ -1601,9 +1605,11 @@ function MnemoAppInner() {
           i === 0
             ? INTRO_DELAY
             : isHighlighted
-            ? HIGHLIGHT_DELAY   // key words: 40% longer — lets reader absorb the important word
+            ? HIGHLIGHT_DELAY   // key words: 40% longer
             : isSentEnd
             ? WEIGHTED_DELAY    // sentence endings: 20% longer
+            : isPunct
+            ? PUNCT_DELAY       // mid-sentence punctuation: 10% longer
             : BASE_DELAY,
       };
     });
@@ -1793,7 +1799,7 @@ function MnemoAppInner() {
         finishReading();
         return;
       }
-      if (r2.nextCpAt > 0 && r2.currentIdx >= r2.nextCpAt) {
+      if (checkpointsEnabled && r2.nextCpAt > 0 && r2.currentIdx >= r2.nextCpAt) {
         r2.nextCpAt = -1;
         showCheckpoint();
         return;
@@ -2378,6 +2384,14 @@ function MnemoAppInner() {
               <button className="mini-btn" onClick={openToc}>☰ TOC</button>
             </div>
             <div className="reader-top-right">
+              <button
+                className="mini-btn"
+                onClick={() => setCheckpointsEnabled(e => !e)}
+                style={{ opacity: checkpointsEnabled ? 1 : 0.4 }}
+                title={checkpointsEnabled ? "Checkpoints on — click to disable" : "Checkpoints off — click to enable"}
+              >
+                {checkpointsEnabled ? "✓ Checks" : "✗ Checks"}
+              </button>
               <button className="mini-btn" onClick={saveBookmark}>Save</button>
               <button className="mini-btn" onClick={() => { setTextBuilt(false); setScreen("text"); if (!isPausedRef.current) togglePause(); }}>Text view</button>
             </div>
